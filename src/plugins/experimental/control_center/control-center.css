@@ -1,0 +1,93 @@
+/* Control center */
+
+window.control-center-window,
+.control-center-window {
+  background-color: var(--color-bg-window);
+  color: var(--theme-fg-label-primary);
+}
+
+.control-center-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-separator-line);
+  font-weight: var(--font-weight-bold);
+}
+
+.control-center-category-grid {
+  padding: 12px;
+}
+
+.control-center-category-widget {
+  background-color: var(--theme-bg-view-secondary);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-l);
+  padding: 12px;
+}
+
+.control-center-category-widget:hover {
+  background-color: var(--color-bg-button-flat-hover);
+}
+
+.control-center-category-icon {
+  -gtk-icon-size: 32px;
+}
+
+.control-center-content-area {
+  background-color: var(--color-bg-window);
+  padding: 12px;
+}
+
+.control-center-config-group,
+.control-center-nested-group-box {
+  background-color: var(--theme-bg-view-secondary);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-l);
+  padding: 6px;
+}
+
+.control-center-config-expander {
+  border-radius: var(--radius-l);
+}
+
+.control-center-setting-row,
+.control-center-vbox-item,
+.control-center-list-item-row {
+  padding: 4px 6px;
+  border-radius: var(--radius-m);
+}
+
+.control-center-setting-row:hover {
+  background-color: var(--color-bg-button-flat-hover);
+}
+
+.control-center-text-input,
+.control-center-numeric-input {
+  background-color: var(--color-bg-entry-base);
+  border: 1px solid var(--color-border-entry-base);
+  border-radius: var(--radius-m);
+  color: var(--theme-fg-label-primary);
+  padding: 6px 10px;
+}
+
+.control-center-text-input:focus-within,
+.control-center-numeric-input:focus-within {
+  border-color: var(--color-border-entry-focus);
+}
+
+.control-center-list-editor {
+  background-color: var(--theme-bg-view-secondary);
+  border-radius: var(--radius-m);
+}
+
+.control-center-value-display {
+  color: var(--theme-fg-label-secondary);
+}
+
+.control-center-toggle-switch,
+.control-center-plugin-enable-switch {
+  background-color: var(--theme-fg-label-secondary);
+}
+
+.control-center-toggle-switch:checked,
+.control-center-plugin-enable-switch:checked {
+  background-color: var(--color-bg-toggle-on);
+}

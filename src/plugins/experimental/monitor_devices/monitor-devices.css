@@ -1,0 +1,70 @@
+/* USB / device monitor */
+
+.usb-monitor-button {
+  background-color: transparent;
+  background-image: none;
+  border-radius: var(--radius-m);
+  box-shadow: none;
+}
+
+.usb-monitor-button:hover {
+  background-color: var(--color-bg-button-flat-hover);
+}
+
+.usb-monitor-container {
+  padding: 10px;
+  background: transparent;
+}
+
+.usb-device-row {
+  background-color: var(--theme-bg-view-secondary);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-l);
+  padding: 6px;
+}
+
+.usb-device-label {
+  color: var(--theme-fg-label-primary);
+}
+
+.usb-action-box {
+  background: transparent;
+}
+
+.usb-eject-button {
+  background-color: transparent;
+  background-image: none;
+  border-radius: var(--radius-m);
+  box-shadow: none;
+}
+
+.usb-eject-button:hover {
+  background-color: var(--color-bg-button-flat-hover);
+}
+
+.usb-eject-button:hover image {
+  color: var(--theme-status-danger);
+}
+
+.usb-monitor-popover.background > contents {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-window-float);
+}
+
+.usb-monitor-popover.background > arrow {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+}
+
+.usb-open-button {
+  background-color: transparent;
+  background-image: none;
+  border-radius: var(--radius-m);
+  box-shadow: none;
+}
+
+.usb-open-button:hover {
+  background-color: var(--color-bg-button-flat-hover);
+}

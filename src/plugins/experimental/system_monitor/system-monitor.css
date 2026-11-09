@@ -1,0 +1,50 @@
+/* System monitor */
+
+.system-monitor-menubutton {
+  -gtk-icon-size: 20px;
+}
+
+.system-monitor-popover.background > contents {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-window-float);
+}
+
+.system-monitor-popover.background > arrow {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+}
+
+.system-monitor-vbox {
+  padding: 12px;
+  background: transparent;
+}
+
+.system-monitor-listview {
+  background: transparent;
+}
+
+.system-monitor-listitem {
+  padding: 4px 8px;
+  border-radius: var(--radius-m);
+}
+
+.system-monitor-listitem:hover {
+  background-color: var(--color-bg-button-flat-hover);
+}
+
+.system-monitor-name-label {
+  color: var(--theme-fg-label-primary);
+}
+
+.system-monitor-value-label {
+  color: var(--theme-fg-label-secondary);
+  font-size: 11px;
+}
+
+.critical-alert,
+.critical-alert label {
+  color: var(--theme-status-danger);
+  font-weight: var(--font-weight-bold);
+}

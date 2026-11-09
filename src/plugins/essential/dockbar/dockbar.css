@@ -1,22 +1,11 @@
-/* 1. Reset the generic class to prevent the 'row/box' from glowing */
+/* The Gtk.Button itself carries the visuals, so the tile and the clickable
+   area are the same thing (no button-inside-a-button look). */
 .dockbar-buttons {
-  border-radius: var(--radius-xs);
-  background-color: transparent;
-  transition: all 250ms ease-out;
-  margin: 0; /* Reset margin to prevent layout shifts */
-  box-shadow: none;
-}
-
-.dockbar-buttons:hover {
-  background-color: transparent; /* Force transparent so the container doesn't glow */
-  box-shadow: none;
-  text-shadow: none;
-}
-
-/* 2. Keep the glow confined strictly to the Button widget */
-.box-dockbar-buttons {
   border-radius: var(--radius-l);
-  padding: 3px 6px;
+  padding: 1px;
+  margin: 0;
+  min-width: 0;
+  min-height: 0;
   -gtk-icon-size: 36px;
   background-color: var(--color-bg-button-normal);
   color: var(--theme-fg-label-primary);
@@ -34,7 +23,7 @@
   transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.box-dockbar-buttons:hover {
+.dockbar-buttons:hover {
   background-color: var(--color-bg-button-normal-hover);
   
   /* The glow stays inside this button's boundaries */
@@ -47,7 +36,7 @@
   transform: translateY(-2px);
 }
 
-.box-dockbar-buttons:active {
+.dockbar-buttons:active {
   background-color: var(--color-bg-button-normal-active);
   background-image: none;
   box-shadow: inset 0 4px 8px 0 rgba(0, 0, 0, 0.6),
@@ -58,11 +47,73 @@
   transition-duration: 40ms;
 }
 
-.box-dockbar-buttons:checked {
+.dockbar-buttons:checked {
   background-color: var(--theme-bg-selected-primary);
   color: var(--theme-fg-text-selected);
   box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.4),
               inset 0 0 15px 0 rgba(255, 255, 255, 0.1),
               0 0 25px 0 var(--color-shadow-hue-bleed),
               0 0 0 1px var(--theme-status-accent);
+}
+
+/* Inner box only centers the icon; it must not paint anything itself */
+.box-dockbar-buttons {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Context menu (right click on a dock item) */
+.dockbar-context-menu.background > contents {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-window-float);
+}
+
+.dockbar-menu-item {
+  background-color: transparent;
+  background-image: none;
+  border-radius: var(--radius-m);
+  padding: 6px 10px;
+  box-shadow: none;
+  color: var(--theme-fg-label-primary);
+}
+
+.dockbar-menu-item:hover {
+  background-color: var(--color-bg-button-flat-hover);
+}
+
+.dock-separator {
+  background-color: var(--color-separator-line);
+  min-width: 1px;
+  min-height: 1px;
+  margin: 6px 4px;
+}
+
+/* Force the tile to hug the icon: beats the default GTK button padding
+   (5px 10px) and min-size, whatever theme is loaded. */
+button.dockbar-buttons {
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  min-height: 0;
+  border-width: 0;
+}
+
+button.dockbar-buttons > box,
+button.dockbar-buttons > .box-dockbar-buttons {
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+button.dockbar-buttons image {
+  margin: 0;
+  padding: 0;
 }

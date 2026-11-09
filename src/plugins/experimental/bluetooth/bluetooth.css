@@ -1,0 +1,29 @@
+/* Bluetooth */
+
+/* Dashboard popover (built by gtk_helper dashboard helper) */
+.bluetooth-dashboard-popover.background > contents {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-window-float);
+}
+
+.bluetooth-dashboard-popover.background > arrow {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+}
+
+/* Dashboard action buttons */
+.bluetooth-dashboard-buttons {
+  background-color: var(--color-bg-button-normal);
+  border-radius: var(--radius-m);
+}
+
+.bluetooth-dashboard-buttons:hover {
+  background-color: var(--color-bg-button-normal-hover);
+}
+
+.bluetooth-dashboard-buttons-connected {
+  background-color: var(--theme-bg-selected-primary);
+  color: var(--theme-fg-text-selected);
+}

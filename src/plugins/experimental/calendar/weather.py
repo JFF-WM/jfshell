@@ -131,6 +131,7 @@ def get_plugin_class():
             def create_weather_row(icon: str, name: str, row: int) -> self.gtk.Label:  # pyright: ignore
                 """Creates a label-value row and returns the value label."""
                 icon_label = self.gtk.Label(label=f"{icon} {name}")
+                icon_label.add_css_class("weather-row-label")
                 icon_label.set_halign(self.gtk.Align.START)
                 self.weather_grid.attach(icon_label, 0, row, 1, 1)  # pyright: ignore
                 value_label = self.gtk.Label(label="...")

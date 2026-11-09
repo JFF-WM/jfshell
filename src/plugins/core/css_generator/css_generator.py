@@ -237,6 +237,25 @@ def get_plugin_class():
             return f"""/* INJECTED BASE CONFIGURATION */
 :root {{
   --font-family-default: {font_stack};
+
+  /* Fallbacks for variables that plugin CSS uses but not every theme defines.
+     Themes are imported after this block, so any theme that defines one of
+     these wins. An undefined var() invalidates the whole declaration, which
+     silently drops shadows/borders/backgrounds from widgets. */
+  --font-family-system: var(--font-family-default);
+  --font-family-monospace: monospace;
+  --line-height-standard: 1.4;
+  --line-height-comfortable: 1.6;
+  --anim-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --shadow-small: 0 1px 2px var(--shadow-dark);
+  --color-accent-blue: var(--theme-status-accent);
+  --accent-blue-light: var(--theme-status-accent);
+  --color-focus-ring: var(--theme-status-accent);
+  --color-shadow-hue-bleed: var(--shadow-medium);
+  --color-bg-box-primary: var(--color-bg-popover);
+  --radius-control-default: var(--radius-s);
+  --padding-window-control-vertical: 4px;
+  --padding-window-control-horizontal: 10px;
 }}
 
 * {{

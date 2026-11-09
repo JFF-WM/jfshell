@@ -1,0 +1,30 @@
+/* Calendar */
+
+.calendar-widget {
+  background-color: transparent;
+  border-radius: var(--radius-l);
+  padding: 6px;
+  color: var(--theme-fg-label-primary);
+}
+
+.calendar-widget:selected {
+  background-color: var(--theme-bg-selected-primary);
+  color: var(--theme-fg-text-selected);
+}
+
+
+/* Popover shell (the code passes the class "calender-popover" - typo kept
+   so existing user overrides keep working) */
+.calender-popover.background > contents,
+.calendar-popover.background > contents {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-window-float);
+}
+
+.calender-popover.background > arrow,
+.calendar-popover.background > arrow {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+}

@@ -1,0 +1,17 @@
+/* System tray */
+
+.tray-box {
+  background: transparent;
+  padding: 0 4px;
+}
+
+.tray-icon {
+  -gtk-icon-size: 20px;
+  margin: 0 3px;
+  padding: 2px;
+  border-radius: var(--radius-s);
+}
+
+.tray-icon:hover {
+  background-color: var(--color-bg-button-flat-hover);
+}

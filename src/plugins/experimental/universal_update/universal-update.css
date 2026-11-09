@@ -1,0 +1,28 @@
+/* Universal update */
+
+.universal-update-popover.background > contents {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-window-float);
+}
+
+.universal-update-popover.background > arrow {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+}
+
+.universal-update-button {
+  -gtk-icon-size: 20px;
+}
+
+.universal-update-now {
+  background-color: var(--color-bg-button-suggested);
+  color: var(--color-fg-inverse);
+  border-radius: var(--radius-m);
+  font-weight: var(--font-weight-bold);
+}
+
+.universal-update-now:hover {
+  background-color: var(--color-bg-button-suggested-hover);
+}

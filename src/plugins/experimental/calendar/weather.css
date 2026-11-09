@@ -1,0 +1,47 @@
+/* Weather summary (lives inside the calendar popover) */
+
+.weather-grid {
+  background-color: var(--theme-bg-view-secondary);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-l);
+  padding: 12px 14px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  margin-right: 8px;
+}
+
+.weather-title-label {
+  font-weight: var(--font-weight-bold);
+  font-size: 14px;
+  color: var(--theme-fg-label-primary);
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--color-separator-line);
+}
+
+.weather-row-label {
+  color: var(--theme-fg-label-secondary);
+}
+
+.weather-temp-value-label,
+.weather-temp-avg-value-label,
+.weather-wind-value-label,
+.weather-humidity-value-label {
+  color: var(--theme-fg-label-primary);
+  font-weight: var(--font-weight-bold);
+  -gtk-font-features: "tnum" 1;
+}
+
+.weather-temp-value-label {
+  color: var(--theme-status-accent);
+}
+
+.weather-rain-summary-label {
+  color: var(--theme-fg-label-primary);
+  margin-top: 6px;
+}
+
+.weather-total-label {
+  color: var(--theme-fg-label-secondary);
+  font-size: 11px;
+}

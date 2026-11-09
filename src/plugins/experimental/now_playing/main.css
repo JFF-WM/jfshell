@@ -1,0 +1,65 @@
+/* Now playing */
+
+.player-trigger {
+  border-radius: var(--radius-m);
+}
+
+.player-popover.background > contents {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-window-float);
+}
+
+.player-popover.background > arrow {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+}
+
+.player-popover-content {
+  padding: 12px;
+  background: transparent;
+}
+
+.player-row {
+  padding: 6px;
+  border-radius: var(--radius-l);
+}
+
+.player-art {
+  border-radius: var(--radius-l);
+  min-width: 64px;
+  min-height: 64px;
+}
+
+.player-art-btn,
+.player-close-btn {
+  background-color: transparent;
+  background-image: none;
+  border-radius: var(--radius-m);
+  box-shadow: none;
+}
+
+.player-art-btn:hover,
+.player-close-btn:hover {
+  background-color: var(--color-bg-button-flat-hover);
+}
+
+.player-title {
+  font-weight: var(--font-weight-bold);
+  color: var(--theme-fg-label-primary);
+}
+
+.player-artist {
+  color: var(--theme-fg-label-secondary);
+  font-size: 11px;
+}
+
+.player-controls {
+  background: transparent;
+}
+
+.player-controls button {
+  -gtk-icon-size: 20px;
+  border-radius: var(--radius-m);
+}

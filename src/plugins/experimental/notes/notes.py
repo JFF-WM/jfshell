@@ -292,7 +292,7 @@ def get_plugin_class():
             self.obj.add_action(show_searchbar_action)
             self.scrolled_window = Gtk.ScrolledWindow()
             self.scrolled_window.add_css_class("notes-scrolledwindow")
-            self.scrolled_window.set_vexpand(True)
+            self.scrolled_window.set_vexpand(False)
             self.scrolled_window.set_propagate_natural_height(True)
             self.scrolled_window.set_propagate_natural_width(True)
             self.scrolled_window.set_min_content_height(self.popover_min_height)
@@ -303,6 +303,7 @@ def get_plugin_class():
             )
             self.main_box = Gtk.Box.new(Gtk.Orientation.VERTICAL, 10)
             self.main_box.add_css_class("notes-main-box")
+            self.main_box.set_size_request(380, -1)  # wide enough for placeholders
             self.main_box.set_margin_top(self.popover_main_margin)
             self.main_box.set_margin_bottom(self.popover_main_margin)
             self.main_box.set_margin_start(self.popover_main_margin)
@@ -326,8 +327,9 @@ def get_plugin_class():
             self.entry_add_desc.connect("activate", self.on_add_note)
             self.main_box.append(self.entry_add_desc)
 
-            buttons_box = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 5)
+            buttons_box = Gtk.Box.new(Gtk.Orientation.HORIZONTAL, 8)
             buttons_box.add_css_class("notes-buttons-box")
+            buttons_box.set_homogeneous(True)
             self.button_add = Gtk.Button.new_with_label(self.add_button_label)
             self.button_add.add_css_class("notes_button_add")
             self.button_add.connect("clicked", self.on_add_note)
@@ -386,6 +388,12 @@ def get_plugin_class():
             self.is_editing = False
             self.note_row_widgets = {}
             notes = get_notes_sync(self.path_handler, self.db_path)
+            # Dynamic height: hide the (empty) list area so the popover only
+            # is as tall as its entries/buttons; it grows with the notes up to
+            # popover_max_height, then scrolls.
+            sw = getattr(self, "scrolled_window", None)
+            if sw is not None:
+                sw.set_visible(any(n[1] for n in notes))
             delete_button_icon = self.gtk_helper.icon_exist(
                 self.delete_icon_name, ["edit-delete"]
             )

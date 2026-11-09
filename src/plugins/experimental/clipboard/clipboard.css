@@ -1,0 +1,48 @@
+/* Clipboard manager */
+
+.clipboard-main-container {
+  padding: 10px;
+  background: transparent;
+}
+
+.clipboard-listbox {
+  background: transparent;
+}
+
+.clipboard-row-hbox {
+  background-color: var(--theme-bg-view-secondary);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-l);
+  padding: 6px;
+}
+
+.clipboard-label-item {
+  color: var(--theme-fg-label-primary);
+}
+
+.clipboard-menu-item-button,
+.clipboard-delete-button {
+  background-color: transparent;
+  background-image: none;
+  border-radius: var(--radius-m);
+  box-shadow: none;
+}
+
+.clipboard-menu-item-button:hover,
+.clipboard-delete-button:hover {
+  background-color: var(--color-bg-button-flat-hover);
+}
+
+.clipboard-delete-button:hover image {
+  color: var(--theme-status-danger);
+}
+
+.clipboard-button-clear {
+  background-color: var(--color-bg-button-normal);
+  border-radius: var(--radius-m);
+  padding: 6px 12px;
+}
+
+.clipboard-button-clear:hover {
+  background-color: var(--color-bg-button-normal-hover);
+}

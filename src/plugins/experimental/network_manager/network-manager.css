@@ -1,0 +1,62 @@
+/* Network manager */
+
+/* Dashboard popover (built by gtk_helper dashboard helper) */
+.network-manager-popover.background > contents {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-window-float);
+}
+
+.network-manager-popover.background > arrow {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+}
+
+.network-manager-popover-content,
+.network-dashboard-view {
+  padding: 10px;
+  background: transparent;
+}
+
+.network-manager-header,
+.network-manager-heading,
+.network-manager-device-header {
+  font-weight: var(--font-weight-bold);
+  color: var(--theme-fg-label-primary);
+}
+
+.network-manager-config-box,
+.network-manager-device-details-grid,
+.network-manager-wifi-scan-box {
+  background-color: var(--theme-bg-view-secondary);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-l);
+  padding: 6px;
+}
+
+.network-manager-config-label {
+  color: var(--theme-fg-label-secondary);
+  font-size: 11px;
+}
+
+.network-manager-config-button,
+.network-manager-device-toggle-button,
+.network-dashboard-device-button,
+.network-scan-item {
+  background-color: transparent;
+  background-image: none;
+  border-radius: var(--radius-m);
+  box-shadow: none;
+}
+
+.network-manager-config-button:hover,
+.network-manager-device-toggle-button:hover,
+.network-dashboard-device-button:hover,
+.network-scan-item:hover {
+  background-color: var(--color-bg-button-flat-hover);
+}
+
+.network-dashboard-device-icon {
+  -gtk-icon-size: 28px;
+}

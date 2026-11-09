@@ -1,0 +1,82 @@
+/* Notifications (panel client + popup server) */
+
+.notification-panel-button {
+  -gtk-icon-size: 20px;
+}
+
+.notification-icon {
+  -gtk-icon-size: 32px;
+}
+
+.notify-client-box {
+  padding: 10px;
+  background: transparent;
+}
+
+.notify-client-heading {
+  font-weight: var(--font-weight-bold);
+  color: var(--theme-fg-label-primary);
+}
+
+.notify-client-body-label {
+  color: var(--theme-fg-label-primary);
+}
+
+.notify-client-timestamp,
+.no-notifications-label {
+  color: var(--theme-fg-label-secondary);
+  font-size: 11px;
+}
+
+.notify-clear-button,
+.notify-dnd-button {
+  background-color: transparent;
+  background-image: none;
+  border-radius: var(--radius-m);
+  box-shadow: none;
+}
+
+.notify-clear-button:hover,
+.notify-dnd-button:hover {
+  background-color: var(--color-bg-button-flat-hover);
+}
+
+/* Popup window shown by the notification server */
+window.notify-window,
+.notify-window {
+  background: transparent;
+}
+
+.notification-box {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-window-float);
+  padding: 12px;
+}
+
+.notification-summary {
+  font-weight: var(--font-weight-bold);
+  color: var(--theme-fg-label-primary);
+}
+
+.notification-body {
+  color: var(--theme-fg-label-secondary);
+}
+
+.notification-action-button,
+.notify-close-button {
+  background-color: transparent;
+  background-image: none;
+  border-radius: var(--radius-m);
+  box-shadow: none;
+}
+
+.notification-action-button:hover,
+.notify-close-button:hover {
+  background-color: var(--color-bg-button-flat-hover);
+}
+
+.notification-action-button {
+  background-color: var(--color-bg-button-normal);
+}

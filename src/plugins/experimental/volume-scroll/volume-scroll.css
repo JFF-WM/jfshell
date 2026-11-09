@@ -1,0 +1,22 @@
+/* Floating volume OSD */
+
+.floating-volume-widget {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-window-float);
+  padding: 12px 16px;
+}
+
+.floating-volume-icon {
+  -gtk-icon-size: 24px;
+}
+
+.floating-volume-label {
+  color: var(--theme-fg-label-primary);
+  font-weight: var(--font-weight-bold);
+}
+
+.floating-volume-slider trough {
+  min-height: 6px;
+}

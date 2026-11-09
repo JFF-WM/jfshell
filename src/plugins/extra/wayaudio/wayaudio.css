@@ -3,7 +3,7 @@
    ========================================================================== */
 
 /* Main Popover Shell */
-.volume-popover-root {
+.volume-popover-root.background > contents {
   background-color: var(--color-bg-popover);
   border-radius: var(--radius-xl);
   border: 1px solid var(--theme-decoration-separator);
@@ -148,4 +148,46 @@ scale slider {
 .volume-percentage-label {
   font-family: var(--font-family-monospace);
   color: var(--theme-fg-label-primary);
+}
+
+/* Panel button + classes the widget sets but that were never styled */
+.volume-panel-button {
+  -gtk-icon-size: 22px;
+}
+
+.volume-section-master,
+.volume-row-master,
+.volume-row-app {
+  padding: 4px 0;
+}
+
+.volume-app-name-label {
+  font-weight: var(--font-weight-bold);
+  color: var(--theme-fg-label-primary);
+}
+
+.volume-app-action-btn,
+.volume-ignore-toggle,
+.volume-mute-button-master,
+.volume-mute-button-app {
+  background-color: transparent;
+  background-image: none;
+  border-radius: var(--radius-m);
+  box-shadow: none;
+  padding: 4px;
+}
+
+.volume-app-action-btn:hover,
+.volume-ignore-toggle:hover,
+.volume-mute-button-master:hover,
+.volume-mute-button-app:hover {
+  background-color: var(--color-bg-button-flat-hover);
+}
+
+.volume-app-entry.ignored {
+  opacity: 0.5;
+}
+
+.volume-stream-separator {
+  opacity: 0.2;
 }
