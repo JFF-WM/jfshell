@@ -1,0 +1,82 @@
+def get_plugin_metadata(_):
+    about = """Provides a toggle button to reveal or hide an overflow container for other panel widgets."""
+
+    return {
+        "id": "org.jfshell.plugin.overflow_indicator",
+        "name": "Overflow Indicator",
+        "version": "1.0.0",
+        "enabled": True,
+        "index": 1,
+        "priority": 1000,
+        "container": "top-panel-systray",
+        "deps": ["top_panel"],
+        "description": about,
+    }
+
+
+def get_plugin_class():
+    from src.plugins.core._base import BasePlugin
+
+    class OverflowIndicator(BasePlugin):
+        PLUGIN_ID = "overflow_indicator"
+
+        def __init__(self, panel_instance):
+            super().__init__(panel_instance)
+
+        def on_start(self):
+            self.is_revealed = False
+            self.hidden_widgets_box = self.gtk.Box.new(
+                self.gtk.Orientation.HORIZONTAL, 0
+            )
+            self.hidden_widgets_box.set_hexpand(False)
+            self.hidden_widgets_box.set_homogeneous(False)
+            self.revealer = self.gtk.Revealer.new()
+            self.revealer.set_reveal_child(False)
+            self.revealer.set_transition_duration(200)
+            self.revealer.set_transition_type(
+                self.gtk.RevealerTransitionType.SLIDE_RIGHT
+            )
+            self.revealer.set_child(self.hidden_widgets_box)
+            self.toggle_button = self.gtk.Button.new()
+            self.toggle_button.set_icon_name("view-more-symbolic")
+            self.toggle_button.add_css_class("flat")
+            self.toggle_button.add_css_class("panel-button")
+            self.toggle_button.connect("clicked", self._on_toggle_clicked)
+            self.widget = self.gtk.Box.new(self.gtk.Orientation.HORIZONTAL, 0)
+            self.widget.add_css_class("linked")
+            self.widget.append(self.toggle_button)
+            self.widget.append(self.revealer)
+            self.main_widget = (self.widget, "append")
+            self.plugin_loader.register_overflow_container(self)
+            self.logger.info(f"{self.PLUGIN_ID} initialized")
+            self.glib.timeout_add_seconds(2, self.reveal)
+
+        def reveal(self):
+            auto_reveal = self.get_plugin_setting_add_hint(
+                ["auto_reveal"], False, "auto reveal"
+            )
+            self.revealer.set_reveal_child(auto_reveal)
+            return False
+
+        def _on_toggle_clicked(self, *args):
+            """Toggles the state of the self.gtk.Revealer."""
+            self.is_revealed = not self.is_revealed
+            self.revealer.set_reveal_child(self.is_revealed)
+            self.logger.debug(f"Overflow toggled: {self.is_revealed}")
+            icon_name = "view-more-symbolic" if not self.is_revealed else "arrow-right"
+            self.toggle_button.set_icon_name(icon_name)
+
+        def add_hidden_widget(self, widget):
+            """
+            Method called by PluginLoader to add a plugin's widget.
+            Ensures the widget is unparented before appending to prevent Gtk-CRITICAL.
+            """
+            parent = widget.get_parent()
+            if parent is not None:
+                parent.remove(widget)
+
+            widget.set_visible(True)
+            self.hidden_widgets_box.append(widget)
+            self.logger.info(f"Widget {widget.get_name()} added to overflow container.")
+
+    return OverflowIndicator

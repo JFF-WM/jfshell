@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jfshell"
+version = "0.9.8.1"
+authors = [{ name = "killown", email = "systemofdown@gmail.com" }]
+description = "A jff panel that behaves like a shell"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+dev = ["pygobject-stubs[Gtk4,Gdk]"]
+
+[project.scripts]
+jfshell = "jfshell.run:main"
+
+[tool.setuptools]
+packages = ["jfshell"]
+package-dir = { "jfshell" = "." }
+include-package-data = true
+
+[tool.setuptools.package-data]
+"jfshell" = ["src/**/*", "config/*", "resources/**/*", "*.txt", "*.md"]

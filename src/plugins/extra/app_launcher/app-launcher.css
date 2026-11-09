@@ -1,0 +1,200 @@
+/* ==========================================================================
+   App Launcher - Full Adaptive Theme
+   ========================================================================== */
+
+/* Launcher Button */
+.app-launcher-menu-button {
+  -gtk-icon-size: 24px;
+  border-radius: 3px;
+  background-color: var(--color-bg-deep);
+  box-shadow:
+    inset 0 0px 1px rgba(0, 0, 0, 0.4),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.25),
+    1px 1px 2px var(--shadow-dark),
+    0px 2px 2px rgba(0, 0, 0, 0.4),
+    0px 2px 1px -1px rgba(0, 0, 0, 0.3),
+    inset 0px -3px 0px rgba(0, 0, 0, 0.2);
+}
+
+.app-launcher-menu-button:hover {
+  background-color: var(--color-bg-button-hover);
+}
+
+/* Popover Shell */
+.app-launcher-popover.background > contents {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-window-float);
+}
+
+.app-launcher-popover.background > arrow {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+}
+
+/* Sidebar Area */
+.app-launcher-sidebar-vbox {
+  background-color: var(--color-bg-window);
+  border-left: 1px solid var(--color-separator-line);
+}
+
+.app-launcher-sidebar-button {
+  background-color: transparent;
+  color: var(--theme-fg-label-secondary);
+  padding: 10px 14px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-l);
+}
+
+.app-launcher-sidebar-button:hover {
+  background-color: var(--color-bg-button-flat-hover);
+  color: var(--theme-fg-label-primary);
+}
+
+/* Search bar */
+.app-launcher-searchbar {
+  background-color: var(--color-bg-entry-base);
+  border: 1px solid var(--color-border-entry-base);
+  border-radius: var(--radius-m);
+  margin: 12px;
+  padding: 8px 12px;
+  color: var(--theme-fg-label-primary);
+}
+
+/* ==========================================================================
+   Grid & FlowBox (spacing for search results)
+   ========================================================================== */
+
+.app-launcher-flowbox {
+  padding: 10px;
+}
+
+/* Force fixed width so apps don't separate when few results are found */
+.app-launcher-flowbox > flowboxchild {
+  padding: 10px;
+  border-radius: var(--radius-l);
+  transition: none;
+}
+
+.app-launcher-flowbox > flowboxchild:hover {
+  background-color: var(--color-bg-button-flat-hover);
+}
+
+.app-launcher-vbox {
+  padding: 6px;
+  margin: 0;
+  background: transparent;
+}
+
+.app-launcher-popover .app-launcher-icon-from-popover {
+  -gtk-icon-size: 64px;
+  padding: 8px;
+  background-color: var(--theme-bg-view-secondary);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-l);
+}
+
+.app-launcher-popover .app-launcher-label-from-popover {
+  font-size: 11px;
+  font-weight: var(--font-weight-bold);
+  color: var(--theme-fg-label-primary);
+  margin-top: 8px;
+}
+
+/* ==========================================================================
+   Full-Width Global Footer
+   ========================================================================== */
+
+.app-launcher-footer-container {
+  border-top: 1px solid var(--color-separator-line);
+  border-bottom-left-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xl);
+}
+
+.app-launcher-footer-separator {
+  opacity: 0.2;
+}
+
+.app-launcher-footer-switches-row {
+}
+
+.app-launcher-footer-label {
+  font-size: 11px;
+  font-weight: var(--font-weight-bold);
+  color: var(--theme-fg-label-secondary);
+  margin-right: 6px;
+}
+
+.app-launcher-footer-item:hover .app-launcher-footer-label {
+  color: var(--theme-fg-label-primary);
+}
+
+.app-launcher-footer-item {
+  background-color: var(--color-bg-deep);
+  background-image: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.05) 0%,
+    rgba(0, 0, 0, 0) 50%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
+  cursor: pointer;
+  padding: 5px;
+}
+
+.app-launcher-footer-item:active {
+  transform: translateY(1px);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.3),
+    inset 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.app-launcher-footer-switch {
+  background-color: var(--theme-fg-label-secondary);
+}
+
+/* ==========================================================================
+   Dialogue & Windows
+   ========================================================================== */
+
+window.dialog,
+window.dialog > box,
+.app-launcher-install-dialog {
+  background-color: var(--color-bg-popover);
+  color: var(--theme-fg-label-primary);
+}
+
+.app-launcher-install-button {
+  background-color: var(--theme-bg-selected-primary);
+  color: var(--color-fg-inverse);
+  padding: 8px 20px;
+  border-radius: var(--radius-m);
+  font-weight: var(--font-weight-bold);
+}
+
+/* jfshell Installer Theme */
+window#jfshell-installer,
+window#jfshell-installer > box {
+  background-color: var(--color-bg-popover);
+  color: var(--theme-fg-label-primary);
+}
+
+window#jfshell-installer headerbar {
+  background-color: var(--color-bg-window);
+  border-bottom: 1px solid var(--theme-decoration-separator);
+}
+
+window#jfshell-installer .card {
+  background-color: var(--theme-bg-view-secondary);
+  border: 1px solid var(--theme-decoration-separator);
+  border-radius: var(--radius-l);
+}

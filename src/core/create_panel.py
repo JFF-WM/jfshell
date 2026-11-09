@@ -1,0 +1,204 @@
+import os
+import sys
+from typing import Dict, Any, Optional, Union
+import gi
+from src.shared import kdl_config
+from gi.repository import Adw, Gdk, Gtk  # pyright: ignore
+from gi.repository import Gtk4LayerShell as LayerShell  # pyright: ignore
+
+gi.require_version("Adw", "1")
+gi.require_version("Gtk4LayerShell", "1.0")
+gi.require_version("Gdk", "4.0")
+gi.require_version("Gtk", "4.0")
+
+PRIMARY_OUTPUT_NAME = None
+
+
+def set_layer_position_exclusive(window) -> None:
+    """Sets the layer position exclusively for the given window."""
+    if window:
+        LayerShell.set_layer(window, LayerShell.Layer.TOP)
+
+
+def unset_layer_position_exclusive(window) -> None:
+    """Sets the layer to background."""
+    if window:
+        LayerShell.set_layer(window, LayerShell.Layer.BOTTOM)
+
+
+def get_monitor_info() -> Dict[str, Dict[str, Any]]:
+    """Retrieve information about the connected monitors."""
+    Gtk.init()
+    screen: Optional[Gdk.Display] = Gdk.Display.get_default()
+    monitor_info: Dict[str, Dict[str, Any]] = {}
+    if screen:
+        monitors = screen.get_monitors()
+        for monitor in monitors:
+            geometry = monitor.get_geometry()  # pyright: ignore
+            name: str = monitor.props.connector  # pyright: ignore
+            monitor_info[name] = {
+                "monitor": monitor,
+                "width": int(geometry.width),
+                "height": int(geometry.height),
+            }
+    return monitor_info
+
+
+def get_monitor_width(monitor: Union[Gdk.Monitor, Dict[str, Any]]) -> int:
+    """Get the width of a monitor."""
+    if isinstance(monitor, Gdk.Monitor):
+        return monitor.get_geometry().width
+    if isinstance(monitor, dict):
+        if "width" in monitor:
+            return monitor["width"]
+        for value in monitor.values():
+            if isinstance(value, (dict, Gdk.Monitor)):
+                try:
+                    return get_monitor_width(value)
+                except ValueError:
+                    continue
+    raise ValueError("Could not determine monitor width from input")
+
+
+def get_config_path() -> str:
+    """
+    Get the path to the panel configuration file using XDG standards.
+    Matches ConfigHandler logic for Flatpak/Host consistency.
+    """
+    xdg_config = os.getenv("XDG_CONFIG_HOME")
+    if not xdg_config:
+        xdg_config = os.path.expanduser("~/.config")
+
+    config_dir = os.path.join(xdg_config, "jfshell")
+    return os.path.join(config_dir, kdl_config.CONFIG_FILENAME)
+
+
+def load_full_config() -> Dict[str, Any]:
+    """
+    Load and return application configuration.
+    Returns empty dict if file is missing to prevent crash.
+    """
+    config_file = get_config_path()
+    try:
+        kdl_config.migrate_legacy_toml(config_file)
+    except Exception:
+        pass
+    if not os.path.exists(config_file):
+        return {}
+
+    try:
+        with open(config_file, "r", encoding="utf-8") as f:
+            return kdl_config.load(f)
+    except Exception:
+        return {}
+
+
+def get_target_monitor(
+    config: Dict[str, Any], monitors: Dict[str, Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """Determine which monitor to use."""
+    if len(sys.argv) > 1:
+        monitor_name = sys.argv[1]
+        target = monitors.get(monitor_name)
+        if target:
+            return target
+
+    panel_cfg = config.get("org.jfshell.panel", {})
+    primary = panel_cfg.get("primary_output", {})
+    if isinstance(primary, dict):
+        monitor_name = primary.get("name")
+        target = monitors.get(monitor_name)  # pyright: ignore
+        if target:
+            return target
+
+    return next(iter(monitors.values()), None)
+
+
+def setup_layer_shell(
+    window: Adw.Window,
+    anchor: str,
+    layer: str,
+    exclusive: bool,
+    width: int,
+    height: int,
+    monitor: Optional[Dict[str, Any]],
+    class_style: str,
+    title: str = "Panel",
+    margin_top: int = 0,
+    margin_bottom: int = 0,
+    margin_left: int = 0,
+    margin_right: int = 0,
+) -> None:
+    """Configure the GTK Layer Shell properties."""
+    LayerShell.init_for_window(window)
+    LayerShell.set_namespace(window, title)
+    LayerShell.set_keyboard_mode(window, LayerShell.KeyboardMode.ON_DEMAND)
+
+    if monitor and "monitor" in monitor:
+        LayerShell.set_monitor(window, monitor["monitor"])
+
+    layer = layer.upper()
+    if layer in ("TOP", "LEFT", "RIGHT"):
+        LayerShell.set_layer(window, LayerShell.Layer.TOP)
+        if margin_top > 0:
+            LayerShell.set_margin(window, LayerShell.Edge.TOP, margin_top)
+        if margin_bottom > 0:
+            LayerShell.set_margin(window, LayerShell.Edge.BOTTOM, margin_bottom)
+        if margin_left > 0:
+            LayerShell.set_margin(window, LayerShell.Edge.LEFT, margin_left)
+        if margin_right > 0:
+            LayerShell.set_margin(window, LayerShell.Edge.RIGHT, margin_right)
+    else:
+        LayerShell.set_layer(window, LayerShell.Layer.BACKGROUND)
+
+    if anchor in ["LEFT", "RIGHT", "TOP", "BOTTOM"]:
+        edge = getattr(LayerShell.Edge, anchor)
+        LayerShell.set_anchor(window, edge, True)
+        if exclusive:
+            LayerShell.auto_exclusive_zone_enable(window)
+
+    window.set_size_request(10, 10)
+    window.add_css_class(class_style)
+
+
+def CreatePanel(
+    app: Gtk.Application,
+    anchor: str,
+    layer: str,
+    exclusive: bool,
+    width: int,
+    height: int,
+    class_style: str,
+    title: str = "CreatePanel",
+    margin_top=0,
+    margin_bottom=0,
+    margin_left=0,
+    margin_right=0,
+) -> Gtk.Window:
+    """Create and configure a raw Gtk panel window."""
+    window = Gtk.Window(application=app)
+    window.set_default_size(width, height)
+
+    config = load_full_config()
+    monitors = get_monitor_info()
+    monitor = get_target_monitor(config, monitors)
+
+    setup_layer_shell(
+        window=window,  # pyright: ignore
+        anchor=anchor,
+        layer=layer,
+        exclusive=exclusive,
+        width=width,
+        height=height,
+        monitor=monitor,
+        class_style=class_style,
+        title=title,
+        margin_top=margin_top,
+        margin_bottom=margin_bottom,
+        margin_left=margin_left,
+        margin_right=margin_right,
+    )
+
+    window.connect("destroy", Gtk.Application.quit)
+
+    return window
