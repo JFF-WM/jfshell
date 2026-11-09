@@ -67,6 +67,30 @@ def get_plugin_class():
             self.db_path = self.db._initialize_db()
             self.notifications = {}
             self.next_id = 1
+            self.is_running = False
+            # The UI reports clicks/closures back through this daemon
+            self.ui.server = self
+            self._loop = get_global_loop()
+
+        def _emit_threadsafe(self, signal_fn, *args):
+            """Signals must be sent from the asyncio loop thread, but the UI
+            calls from the GTK thread."""
+
+            def _send():
+                try:
+                    signal_fn(*args)
+                except Exception as e:
+                    self.logger.error(f"Error emitting D-Bus signal: {e}")
+
+            self._loop.call_soon_threadsafe(_send)
+
+        def emit_action(self, nid, action_key):
+            self.logger.info(f"ActionInvoked '{action_key}' for ID {nid}")
+            self._emit_threadsafe(self.ActionInvoked, nid, action_key)
+
+        def emit_closed(self, nid, reason):
+            self.notifications.pop(nid, None)
+            self._emit_threadsafe(self.NotificationClosed, nid, reason)
 
         @method()
         async def Notify(
@@ -98,8 +122,18 @@ def get_plugin_class():
 
             try:
                 # MANDATORY: Sanitize EVERY field that goes into the DB to strip dbus-fast Variants
+                # image-data is written to a cached PNG; the remaining hints
+                # (desktop-entry, url, ...) must survive for click handling.
+                image_keys = ("image-data", "icon_data")
                 clean_hints = self.ui.notify_utils.sanitize_for_db(
-                    hints, notification_id
+                    {k: v for k, v in hints.items() if k not in image_keys},
+                    notification_id,
+                )
+                image_hints = {k: v for k, v in hints.items() if k in image_keys}
+                image_path = (
+                    self.ui.notify_utils.sanitize_for_db(image_hints, notification_id)
+                    if image_hints
+                    else None
                 )
                 clean_actions = self.ui.notify_utils.sanitize_for_db(
                     actions, notification_id
@@ -107,8 +141,8 @@ def get_plugin_class():
 
                 # Use cached icon if sanitize_for_db returned a path (e.g. from image-data)
                 db_icon = app_icon
-                if isinstance(clean_hints, str) and clean_hints.endswith(".png"):
-                    db_icon = clean_hints
+                if isinstance(image_path, str) and image_path.endswith(".png"):
+                    db_icon = image_path
 
                 notification_db = {
                     "id": notification_id,
@@ -143,12 +177,11 @@ def get_plugin_class():
 
         @method()
         def invoke_action(self, id: "u", action_key: "s"):
-            self.logger.info(f"Invoking action '{action_key}' for ID {id}")
-            self.ActionInvoked(id, action_key)
+            self.emit_action(id, action_key)
 
         @method()
         def GetCapabilities(self) -> "as":
-            return ["actions", "body", "icon-static"]
+            return ["actions", "body", "icon-static", "body-hyperlinks"]
 
         @method()
         def GetServerInformation(self) -> "ssss":
@@ -189,6 +222,7 @@ def get_plugin_class():
                         | NameFlag.DO_NOT_QUEUE,
                     )
 
+                self.is_running = True
                 self.logger.info("Notification daemon listening via dbus-fast.")
             except Exception as e:
                 self.logger.error(f"Error starting notification daemon: {e}")

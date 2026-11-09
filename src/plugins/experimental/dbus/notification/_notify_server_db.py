@@ -56,7 +56,7 @@ class Database:
                     notification["summary"],
                     notification["body"],
                     notification["app_icon"],
-                    ",".join(notification["actions"]),
+                    json.dumps(list(notification["actions"])).decode(),
                     json.dumps(hints),
                     notification["expire_timeout"],
                 ),

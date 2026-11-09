@@ -24,6 +24,7 @@ def get_plugin_class():
     import re
     from src.plugins.core._base import BasePlugin
     from ._utils import NotifyUtils
+    from ._activate import activate_notification
 
     class UI(BasePlugin):
         """
@@ -38,6 +39,7 @@ def get_plugin_class():
             self.panel = panel_instance
             self.notify_utils = NotifyUtils(self.panel)
             self.active_popups = {}
+            self.server = None  # set by the NotificationDaemon that owns us
 
         def on_start(self):
             # Lifecycle initialization
@@ -68,46 +70,43 @@ def get_plugin_class():
             return re.sub(r"<[^>]*>", "", text)
 
         def _get_server(self):
-            server = self.plugin_loader.plugins.get("notify_server")
-            if server and hasattr(server, "is_running") and server.is_running:
-                return server
-            return None
+            return self.server
 
-        def dismiss_notification(self, notification_id):
-            if notification_id in self.active_popups:
-                window = self.active_popups.pop(notification_id)
-                window.destroy()
+        def dismiss_notification(self, notification_id, reason=2):
+            """Close the toast. reason: 1 expired, 2 dismissed by the user."""
+            window = self.active_popups.pop(notification_id, None)
+            if window is None:
+                return False  # already closed (e.g. timer fired after a click)
+            window.destroy()
 
             server = self._get_server()
-            if server and hasattr(server, "NotificationClosed"):
-                try:
-                    server.NotificationClosed(notification_id, 2)
-                except Exception as e:
-                    self.logger.error(f"Error reporting closure to server: {e}")
+            if server:
+                server.emit_closed(notification_id, reason)
             return False
 
+        def _expire_notification(self, notification_id):
+            return self.dismiss_notification(notification_id, reason=1)
+
         def on_notification_click(self, gesture, n_press, x, y, notification, *args):
-            hints = notification.get("hints", {})
-            uri_variant = hints.get("uri") or hints.get("url")
-            uri_to_launch = (
-                uri_variant.value if hasattr(uri_variant, "value") else uri_variant
-            )
-
-            if not uri_to_launch:
-                summary = notification.get("summary", "")
-                body = notification.get("body", "")
-                uri_to_launch = self._extract_first_uri_from_text(f"{summary} {body}")
-
-            if uri_to_launch:
-                self.panel.command_runner.run(f"xdg-open '{uri_to_launch}'")
-                self.dismiss_notification(notification.get("id", 0))
+            nid = notification.get("id", 0)
+            # Right click just dismisses; left click opens the app/link.
+            if gesture.get_current_button() == 1:
+                server = self._get_server()
+                try:
+                    activate_notification(
+                        self,
+                        notification,
+                        emit_action=server.emit_action if server else None,
+                    )
+                except Exception as e:
+                    self.logger.error(f"Failed to open notification {nid}: {e}")
+            self.dismiss_notification(nid)
 
         def on_action_clicked(self, action_id, notification, window):
             try:
                 server = self._get_server()
-                if server and hasattr(server, "ActionInvoked"):
-                    nid = notification.get("id", 0)
-                    server.ActionInvoked(nid, action_id)
+                if server:
+                    server.emit_action(notification.get("id", 0), action_id)
             except Exception as e:
                 self.logger.error(f"Failed to invoke action {action_id}: {e}")
             self.dismiss_notification(notification.get("id", 0))
@@ -137,6 +136,11 @@ def get_plugin_class():
                 self.get_plugin_setting(["popup_position_y"], 32)
                 + hardcoded_y_offset_plus
             )
+
+            # A replacing notification (same id) supersedes the old toast
+            old_window = self.active_popups.pop(nid, None)
+            if old_window is not None:
+                old_window.destroy()
 
             window = self.gtk.Window()
             window.add_css_class("notify-window")
@@ -217,6 +221,6 @@ def get_plugin_class():
             self.active_popups[nid] = window
             window.present()
 
-            self.glib.timeout_add_seconds(self.timeout, self.dismiss_notification, nid)
+            self.glib.timeout_add_seconds(self.timeout, self._expire_notification, nid)
 
     return UI

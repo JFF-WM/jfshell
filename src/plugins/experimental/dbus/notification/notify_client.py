@@ -19,6 +19,7 @@ def get_plugin_metadata(_):
 def get_plugin_class():
     import re
     from ._utils import NotifyUtils
+    from ._activate import activate_notification
     from src.plugins.core._base import BasePlugin
 
     class NotificationPopoverPlugin(BasePlugin):
@@ -234,22 +235,15 @@ def get_plugin_class():
                 widget: The Gtk widget that received the click.
             """
             self.logger.info(f"Notification clicked: {notification.get('id')}")
-            extracted_uri = self._extract_first_uri_from_text(
-                notification.get("body", "")
-            )
-            hints = notification.get("hints", {})
-            hint_url = hints.get("url", "")
-            uri_to_launch = extracted_uri or hint_url
-            if uri_to_launch:
-                self.on_launch_uri(uri_to_launch)
-                return
-            desktop_entry = hints.get("desktop-entry", "").lower()
-            if desktop_entry:
-                self.cmd.run(desktop_entry)
-                if hasattr(self, "popover") and self.popover:
-                    self.popover.popdown()
-                self.logger.info(f"Launching application: {desktop_entry}")
-                return
+            try:
+                server = getattr(self, "notification_server", None)
+                activate_notification(
+                    self,
+                    notification,
+                    emit_action=getattr(server, "emit_action", None),
+                )
+            except Exception as e:
+                self.logger.error(f"Failed to open notification: {e}")
             if hasattr(self, "popover") and self.popover:
                 self.popover.popdown()
 
@@ -287,21 +281,26 @@ def get_plugin_class():
             Args:
                 notification: The notification data dictionary.
             """
-            hbox = self.gtk.Box.new(self.gtk.Orientation.HORIZONTAL, 30)
+            hbox = self.gtk.Box.new(self.gtk.Orientation.HORIZONTAL, 14)
             hbox.add_css_class("notify-client-box")
             close_button = self.gtk.Button.new_from_icon_name("window-close-symbolic")
             close_button.set_tooltip_text("Close Notification")
             self.gtk_helper.add_cursor_effect(close_button)
-            close_button.set_margin_start(10)
+            close_button.set_margin_start(2)
+            close_button.set_valign(self.gtk.Align.START)
+            close_button.add_css_class("notify-close-button")
             close_button.connect(
                 "clicked",
                 lambda _: self.delete_notification(notification.get("id"), hbox),
             )
             self.update_widget_safely(hbox.append, close_button)
             left_box = self.gtk.Box.new(self.gtk.Orientation.VERTICAL, 5)
+            left_box.add_css_class("notify-client-left")
             left_box.set_halign(self.gtk.Align.START)
             left_box.set_valign(self.gtk.Align.START)
             right_box = self.gtk.Box.new(self.gtk.Orientation.VERTICAL, 5)
+            right_box.add_css_class("notify-client-right")
+            right_box.set_hexpand(True)
             right_box.set_halign(self.gtk.Align.START)
             if "gestures_setup" in self.plugins:
                 gestures_setup = self.plugins["gestures_setup"]
@@ -320,6 +319,7 @@ def get_plugin_class():
                 self.update_widget_safely(left_box.append, icon)
             app_label = self.gtk.Label(label=f"<b>{notification['app_name']}</b>")
             app_label.set_use_markup(True)
+            app_label.add_css_class("notify-client-app-label")
             app_label.set_halign(self.gtk.Align.START)
             self.update_widget_safely(left_box.append, app_label)
             summary_label = self.gtk.Label(label=notification["summary"])
@@ -340,6 +340,7 @@ def get_plugin_class():
             self.update_widget_safely(hbox.append, left_box)
             self.update_widget_safely(hbox.append, right_box)
             separator = self.gtk.Separator.new(self.gtk.Orientation.HORIZONTAL)
+            separator.add_css_class("notify-client-separator")
             self.update_widget_safely(self.vbox.append, hbox)
             self.update_widget_safely(self.vbox.append, separator)
             self.notification_on_popover[notification["id"]] = hbox
@@ -419,6 +420,7 @@ def get_plugin_class():
             """Creates or updates the notification popover using cached data."""
             if not hasattr(self, "popover") or not self.popover:
                 self.popover = self.gtk.Popover.new()
+                self.popover.add_css_class("notify-popover")
                 self.main_vbox = self.gtk.Box.new(self.gtk.Orientation.VERTICAL, 5)
                 self.main_vbox.set_margin_top(10)
                 self.main_vbox.set_margin_bottom(10)
@@ -426,7 +428,8 @@ def get_plugin_class():
                 self.main_vbox.set_margin_end(10)
 
                 # Notifications Scrolled Area
-                self.vbox = self.gtk.Box.new(self.gtk.Orientation.VERTICAL, 5)
+                self.vbox = self.gtk.Box.new(self.gtk.Orientation.VERTICAL, 8)
+                self.vbox.add_css_class("notify-client-list")
                 self.vbox.set_vexpand(True)
 
                 scrolled_window = self.gtk.ScrolledWindow()
@@ -451,6 +454,7 @@ def get_plugin_class():
                 # Bottom Controls Row
                 bottom_box = self.gtk.Box.new(self.gtk.Orientation.HORIZONTAL, 10)
                 bottom_box.set_margin_top(10)
+                bottom_box.add_css_class("notify-bottom-box")
 
                 # Unified DND Toggle Button (Left)
                 dnd_label = (
