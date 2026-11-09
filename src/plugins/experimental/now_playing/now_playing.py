@@ -203,6 +203,9 @@ def get_plugin_class():
             """
             btn = Gtk.Button.new_from_icon_name(icon)
             btn.add_css_class("flat")
+            btn.add_css_class("player-control-btn")
+            if action == "play_pause":
+                btn.add_css_class("player-play-btn")
             self.add_cursor_effect(btn)
             btn.connect(
                 "clicked",
