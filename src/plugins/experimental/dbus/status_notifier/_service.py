@@ -1,342 +1,217 @@
-from dbus_fast.aio import MessageBus
-from dbus_fast import Message
-from dbus_fast.constants import MessageType
-from dbus_fast.service import ServiceInterface, dbus_property, signal, method
-from dbus_fast import Variant, DBusError, BusType, PropertyAccess
+"""
+StatusNotifier (system tray) D-Bus side.
+
+* StatusNotifierWatcher  - the org.kde.StatusNotifierWatcher service apps
+                           register their tray items with.
+* StatusNotifierItem     - proxy for one registered item (icon, tooltip,
+                           menu, click methods) that announces changes to the
+                           tray widget through the IPC event bus.
+
+Everything in here runs on the global asyncio loop thread. The GTK side
+(client.py) must hop to the GTK thread before touching widgets.
+"""
+
 import asyncio
+import re
 import typing
-from typing import Dict
-from src.plugins.core._event_loop import get_global_loop
+from typing import Any, Dict, List, Optional
+
+from dbus_fast import BusType, DBusError, Message, PropertyAccess, Variant
+from dbus_fast import RequestNameReply
+from dbus_fast.aio import MessageBus
+from dbus_fast.constants import MessageType
+from dbus_fast.service import ServiceInterface, dbus_property, method, signal
+
 from src.plugins.core._base import BasePlugin
-from ._dbus_menu_proxy import DBusMenuProxy, dbus_menu_to_gio_model
 from src.shared.concurrency_helper import ConcurrencyHelper
 
+WATCHER_BUS_NAME = "org.kde.StatusNotifierWatcher"
+WATCHER_OBJECT_PATH = "/StatusNotifierWatcher"
+DEFAULT_ITEM_PATH = "/StatusNotifierItem"
 
-class StatusNotifierHost(BasePlugin):
-    """
-    This plugin is a D-Bus service that acts as a
-    StatusNotifierHost to manage system tray icons.
-    """
-
-    def __init__(self, panel_instance):
-        super().__init__(panel_instance)
-        self.items = {}
-        self._on_item_added = []
-        self._on_item_removed = []
-
-    async def register_item(self, bus: MessageBus, service_name: str, object_path: str):
-        """Register a new StatusNotifierItem."""
-        try:
-            item = StatusNotifierItem(bus, service_name, object_path, self.obj)
-            self.items[service_name] = item
-            success = await item.initialize()
-            if success:
-                for callback in self._on_item_added:
-                    callback(item)
-            else:
-                self.logger.error(
-                    f"Failed to initialize StatusNotifierItem for {service_name}{object_path}"
-                )
-        except Exception as e:
-            self.logger.error(
-                f"Error registering item for {service_name}{object_path}: {e}"
-            )
-
-    def unregister_item(self, service_name: str):
-        """
-        Unregister a StatusNotifierItem and clean up resources.
-        Args:
-            service_name (str): The D-Bus service name of the tray icon.
-        """
-        if service_name in self.items:
-            item = self.items.pop(service_name, None)
-            if item:
-                self.logger.info(f"Removing tray icon for service: {service_name}")
-                for callback in self._on_item_removed:
-                    try:
-                        callback(item)
-                    except Exception as e:
-                        self.logger.error(
-                            f"Error invoking removal callback for {service_name}: {e}"
-                        )
-            else:
-                self.logger.error(f"No tray icon found for service: {service_name}")
-        else:
-            self.logger.warning(f"Service not registered: {service_name}")
+_NAME_OWNER_CHANGED_RULE = (
+    "type='signal',sender='org.freedesktop.DBus',"
+    "interface='org.freedesktop.DBus',member='NameOwnerChanged'"
+)
 
 
 class StatusNotifierWatcher(ServiceInterface):
     """
-    The central service that listens for applications to register new tray icons.
+    The central service that listens for applications registering tray icons.
     """
 
     def __init__(self, service: str, panel_instance):
         super().__init__(service)
-        self.host = StatusNotifierHost(panel_instance)
         self.obj = panel_instance
         self.logger = self.obj.logger
-        self.loop = get_global_loop()
-        self.newest_service_name = None
-        self._items: list[tuple[str, str]] = []
-        self.bus = None
-        self.on_item_added = None
-        self.object_path_to_bus_name = {}
-        self.on_item_removed = None
-        self.status_notifier_item = None
-        self.watcher = None
-        self.service = service
-        self.service_name_to_object_path: Dict[str, str] = {}
+        self.bus: Optional[MessageBus] = None
         self.concurrency_helper = ConcurrencyHelper(panel_instance)
+        # item_id ("<bus name><object path>") -> StatusNotifierItem
+        self.items: Dict[str, "StatusNotifierItem"] = {}
+        # object path -> bus name of the last RegisterStatusNotifierItem caller
+        self._register_senders: Dict[str, str] = {}
+        self._registering: typing.Set[str] = set()
 
-    def run_server_in_background(self, panel_instance):
-        watcher = None
-        from ._service import (
-            StatusNotifierWatcher,
-            StatusNotifierItem,
-        )
+    # ------------------------------------------------------------------ run
+    def run_server_in_background(self, panel_instance=None):
+        """Connect to the session bus and export this watcher."""
+        self.concurrency_helper.run_in_async_task(self._run())
 
-        async def _run_server(panel_instance):
-            bus_name = "org.kde.StatusNotifierWatcher"
-            watcher = StatusNotifierWatcher(bus_name, self.obj)
-            bus = await watcher.setup()
-            bus.export("/StatusNotifierWatcher", watcher)
-            await bus.request_name(bus_name)
-
-            async def on_item_added(service_name: str, object_path: str):
-                self.status_notifier_item = StatusNotifierItem(
-                    bus, service_name, object_path, panel_instance
-                )
-                success = await self.status_notifier_item.initialize()
-                if success:
-                    self.logger.info(
-                        f"Initialized StatusNotifierItem for {service_name}{object_path}"
-                    )
-                else:
-                    self.logger.warning(
-                        f"Failed to initialize StatusNotifierItem for {service_name}{object_path}"
-                    )
-
-            watcher.on_item_added = on_item_added
-            while True:
-                await asyncio.sleep(1)
-
-        self.concurrency_helper.run_in_async_task(_run_server(panel_instance))
-        return watcher
-
-    async def setup(self):
-        self.bus = await MessageBus(bus_type=BusType.SESSION).connect()
-        self.bus.add_message_handler(self.handle_message)
-        return self.bus
-
-    def handle_name_owner_changed(
-        self, service_name: str, old_owner: str, new_owner: str
-    ):
-        """Handle the NameOwnerChanged signal."""
+    async def _run(self):
         try:
-            self.logger.info(
-                f"NameOwnerChanged signal: {service_name}, old={old_owner}, new={new_owner}"
-            )
-            if new_owner:
-                self.logger.info(
-                    f"Service {service_name} has appeared. Waiting for it to register a StatusNotifierItem."
-                )
-            elif service_name in self.service_name_to_object_path:
-                self.unregister_item(service_name)
-        except Exception as e:
-            self.logger.error(f"Error handling NameOwnerChanged signal: {e}")
-
-    def unregister_item(self, service_name: str):
-        """
-        Unregister a StatusNotifierItem and clean up resources.
-        Args:
-            service_name (str): The D-Bus service name of the tray icon.
-        """
-        if service_name not in self.service_name_to_object_path:
-            self.logger.warning(f"Service not registered: {service_name}")
-            return
-        object_path = self.service_name_to_object_path.pop(service_name, None)
-        self.logger.info(f"Removed service mapping: {service_name} -> {object_path}")
-        self.host.unregister_item(service_name)
-
-        async def cleanup():
-            try:
-                item = StatusNotifierItem(self.bus, service_name, object_path, self.obj)  # pyright: ignore
-                await item._tray_icon_removed()
-            except Exception as e:
-                self.logger.error(f"Error during cleanup for {service_name}: {e}")
-
-        asyncio.create_task(cleanup())
-        self.logger.info(f"Removing tray icon for service: {service_name}")
-
-    async def get_pid_for_service(self, service_name: str, bus: MessageBus) -> int:
-        """
-        Retrieve the PID of a D-Bus service using its unique name.
-        """
-        try:
-            reply = await bus.call(
+            self.bus = await MessageBus(bus_type=BusType.SESSION).connect()
+            self.bus.add_message_handler(self.handle_message)
+            # NameOwnerChanged is only delivered to connections that asked
+            # for it. Without this match rule vanished apps were never noticed
+            # and their icons stayed in the tray forever.
+            await self.bus.call(
                 Message(
-                    message_type=MessageType.METHOD_CALL,
                     destination="org.freedesktop.DBus",
-                    interface="org.freedesktop.DBus",
                     path="/org/freedesktop/DBus",
-                    member="GetConnectionUnixProcessID",
+                    interface="org.freedesktop.DBus",
+                    member="AddMatch",
                     signature="s",
-                    body=[service_name],
+                    body=[_NAME_OWNER_CHANGED_RULE],
                 )
             )
-            if reply.message_type == MessageType.METHOD_RETURN:  # pyright: ignore
-                pid = reply.body[0]  # pyright: ignore
-                return pid
-            else:
+            self.bus.export(WATCHER_OBJECT_PATH, self)
+            reply = await self.bus.request_name(WATCHER_BUS_NAME)
+            if reply != RequestNameReply.PRIMARY_OWNER:
                 self.logger.warning(
-                    f"Failed to retrieve PID for {service_name}: Invalid reply"
+                    f"{WATCHER_BUS_NAME} is owned by another tray host "
+                    f"(reply={reply!r}); apps will register with it instead."
                 )
-                return -1
-        except DBusError as e:
-            self.logger.error(f"DBus error while fetching PID for {service_name}: {e}")
-            return -1
+                return
+            self.logger.info("StatusNotifierWatcher is running.")
+            self.StatusNotifierHostRegistered()
         except Exception as e:
-            self.logger.error(
-                f"Unexpected error while fetching PID for {service_name}: {e}"
-            )
-            return -1
+            self.logger.error(f"Failed to start StatusNotifierWatcher: {e}")
 
-    @signal()
-    def StatusNotifierItemRegistered(self, service_name: "s"):  # pyright: ignore
-        self.logger.info(f"Tray icon registered: {service_name}")
-
-    @signal()
-    def StatusNotifierItemUnregistered(self, service_and_path: "s") -> "s":  # pyright: ignore
-        """
-        Signal emitted when a StatusNotifierItem is unregistered.
-        """
-        self.logger.info(f"StatusNotifierItem unregistered: {service_and_path}")
-        return service_and_path
-
+    # ------------------------------------------------------- bus messages
     def handle_message(self, message):
+        """
+        Called for every message the connection sees. We only care about
+        * RegisterStatusNotifierItem(path) calls - to learn who the caller is
+          (apps that register by object path give no bus name), and
+        * NameOwnerChanged - to drop items whose app went away.
+        """
         try:
             if (
-                message.sender == "org.freedesktop.DBus"
-                and message.interface == "org.freedesktop.DBus"
-                and message.member == "NameOwnerChanged"
+                message.message_type == MessageType.METHOD_CALL
+                and message.member == "RegisterStatusNotifierItem"
+                and message.sender
+                and message.body
+                and isinstance(message.body[0], str)
+                and message.body[0].startswith("/")
             ):
-                service_name, old_owner, new_owner = message.body
-                self.handle_name_owner_changed(service_name, old_owner, new_owner)
-                return
-            if not message.sender or not message.body:
-                return
-            raw_object_path = message.body[0] if message.body else None
-            if isinstance(raw_object_path, Variant):
-                object_path = raw_object_path.value
-            else:
-                object_path = raw_object_path
-            if not isinstance(object_path, str) or not object_path.startswith("/"):
-                return
-            if message.sender == "org.freedesktop.DBus":
-                self.logger.info(f"Ignoring system-specific service: {message.sender}")
-                return
-            self.object_path_to_bus_name[object_path] = message.sender
-            self.logger.info(f"Stored mapping: {object_path} -> {message.sender}")
-            if object_path.startswith("/org/ayatana/NotificationItem"):
-                self.logger.info(
-                    f"Ayatana indicator detected: {message.sender} at {object_path}"
-                )
+                self._register_senders[message.body[0]] = message.sender
+            elif (
+                message.message_type == MessageType.SIGNAL
+                and message.member == "NameOwnerChanged"
+                and message.interface == "org.freedesktop.DBus"
+            ):
+                name, _old_owner, new_owner = message.body
+                if not new_owner:
+                    self.handle_name_vanished(name)
         except Exception as e:
             self.logger.error(f"Error handling DBus message: {e}")
 
+    def handle_name_vanished(self, bus_name: str):
+        gone = [i for i in self.items.values() if i.service_name == bus_name]
+        for item in gone:
+            self.unregister_item(item.item_id)
+
+    # -------------------------------------------------------- registration
+    @staticmethod
+    def parse_registration(
+        service_or_path: str, sender_for_path: Optional[str]
+    ) -> typing.Tuple[Optional[str], str]:
+        """
+        Spec: the argument is a bus name, or (libappindicator) an object path
+        whose owner is the caller. Real world also sends "<name>/<path>".
+        Returns (bus_name, object_path); bus_name None if it cannot be found.
+        """
+        if service_or_path.startswith("/"):
+            return sender_for_path, service_or_path
+        if "/" in service_or_path:
+            name, path = service_or_path.split("/", 1)
+            return name, "/" + path
+        return service_or_path, DEFAULT_ITEM_PATH
+
     @method()
     async def RegisterStatusNotifierItem(self, service_or_path: "s"):  # pyright: ignore
-        """Register a status notifier item."""
-        if not service_or_path:
-            self.logger.warning("No service or path provided. Ignoring registration.")
+        if not service_or_path or service_or_path == "org.freedesktop.DBus":
+            self.logger.warning(f"Ignoring invalid registration: {service_or_path!r}")
             return
-        if service_or_path == "org.freedesktop.DBus":
-            self.logger.warning(f"Ignoring invalid registration: {service_or_path}")
-            return
-        if service_or_path.startswith(":"):
-            service_name = service_or_path
-            object_path = "/StatusNotifierItem"
-            self.logger.info(
-                f"Received service name: {service_name}, using default path: {object_path}"
-            )
-        elif service_or_path.startswith("/"):
-            object_path = service_or_path
-            service_name = await self.resolve_service_name_for_object_path(object_path)
-            if not service_name:
-                self.logger.warning(
-                    f"Failed to resolve bus name for object path: {object_path}"
-                )
-                return
-            self.logger.info(
-                f"Resolved service name: {service_name} for object path: {object_path}"
-            )
-        else:
+        service_name, object_path = self.parse_registration(
+            service_or_path, self._register_senders.pop(service_or_path, None)
+        )
+        if not service_name:
             self.logger.warning(
-                f"Invalid input format: {service_or_path}. Must start with ':' or '/'."
+                f"Cannot find the caller of path registration {service_or_path}"
             )
             return
-        self.service_name_to_object_path[service_name] = object_path
+        item_id = f"{service_name}{object_path}"
+        if item_id in self.items or item_id in self._registering:
+            return  # apps often register twice
+        self._registering.add(item_id)
         try:
-            item = StatusNotifierItem(self.bus, service_name, object_path, self.obj)  # pyright: ignore
-            success = await item.initialize()
-            if not success:
-                self.logger.warning(
-                    f"Failed to initialize StatusNotifierItem for {service_name}{object_path}"
-                )
+            item = StatusNotifierItem(
+                self.bus,  # pyright: ignore
+                service_name,
+                object_path,
+                self.obj,
+            )
+            if not await item.initialize():
+                self.logger.warning(f"Failed to initialize tray item {item_id}")
                 return
-            await self.host.register_item(self.bus, service_name, object_path)  # pyright: ignore
-            self.StatusNotifierItemRegistered(f"{service_name} {object_path}")
+            self.items[item_id] = item
+            self.StatusNotifierItemRegistered(item_id)
+            self._emit_items_changed()
+            await item.announce()
         except Exception as e:
-            self.logger.error(
-                f"Error creating StatusNotifierItem for {service_name}{object_path}: {e}"
-            )
+            self.logger.error(f"Error registering tray item {item_id}: {e}")
+        finally:
+            self._registering.discard(item_id)
 
-    async def resolve_service_name_for_object_path(
-        self, object_path: str
-    ) -> str | None:
-        """
-        Resolve the current service name for a given object path.
-        """
+    def unregister_item(self, item_id: str):
+        item = self.items.pop(item_id, None)
+        if item is None:
+            return
+        self.logger.info(f"Removing tray icon {item_id}")
+        self.StatusNotifierItemUnregistered(item_id)
+        self._emit_items_changed()
+        item.announce_removed()
+
+    def _emit_items_changed(self):
         try:
-            if object_path in self.object_path_to_bus_name:
-                bus_name = self.object_path_to_bus_name[object_path]
-                self.logger.info(
-                    f"Resolved service name from dictionary: {bus_name} for object path: {object_path}"
-                )
-                return bus_name
-            bus = await MessageBus().connect()
-            reply = await bus.call(
-                Message(
-                    message_type=MessageType.METHOD_CALL,
-                    destination="org.freedesktop.DBus",
-                    interface="org.freedesktop.DBus",
-                    path="/org/freedesktop/DBus",
-                    member="GetNameOwner",
-                    signature="s",
-                    body=[object_path],
-                )
+            self.emit_properties_changed(
+                {"RegisteredStatusNotifierItems": self.RegisteredStatusNotifierItems}
             )
-            if reply.message_type == MessageType.METHOD_RETURN:  # pyright: ignore
-                bus_name = reply.body[0]  # pyright: ignore
-                self.object_path_to_bus_name[object_path] = bus_name
-                self.logger.info(
-                    f"Resolved service name via introspection: {bus_name} for object path: {object_path}"
-                )
-                return bus_name
         except Exception as e:
-            self.logger.error(
-                f"Error resolving service name for object path {object_path}: {e}"
-            )
-        return None
+            self.logger.error(f"Could not emit PropertiesChanged: {e}")
 
     @method()
-    def RegisterStatusNotifierHost(self, service_name: "s"):  # pyright: ignore
-        """Register a status notifier host."""
-        self.logger.info(f"StatusNotifierHost registered: {service_name}")
+    def RegisterStatusNotifierHost(self, service: "s"):  # pyright: ignore
+        self.logger.info(f"StatusNotifierHost registered: {service}")
 
+    # ------------------------------------------------------------- signals
+    @signal()
+    def StatusNotifierItemRegistered(self, service: "s") -> "s":  # pyright: ignore
+        return service
+
+    @signal()
+    def StatusNotifierItemUnregistered(self, service: "s") -> "s":  # pyright: ignore
+        return service
+
+    @signal()
+    def StatusNotifierHostRegistered(self):  # pyright: ignore
+        pass
+
+    # ---------------------------------------------------------- properties
     @dbus_property(access=PropertyAccess.READ)
     def RegisteredStatusNotifierItems(self) -> "as":  # pyright: ignore
-        return [item[0] or item[1] for item in self._items]
+        return list(self.items.keys())
 
     @dbus_property(access=PropertyAccess.READ)
     def IsStatusNotifierHostRegistered(self) -> "b":  # pyright: ignore
@@ -349,8 +224,8 @@ class StatusNotifierWatcher(ServiceInterface):
 
 class StatusNotifierItem(BasePlugin):
     """
-    A proxy object that represents a single application's tray icon.
-    It now includes logic for resilient initialization and D-Bus menu translation.
+    Proxy for one application's tray icon. Properties are fetched leniently:
+    only a few are mandatory in practice, many apps omit the rest.
     """
 
     IFACES: typing.Final[typing.List[str]] = [
@@ -359,6 +234,24 @@ class StatusNotifierItem(BasePlugin):
     ]
     MAX_ATTEMPTS: typing.Final[int] = 10
     RETRY_DELAY: typing.Final[float] = 0.5
+    MENU_PROPS: typing.Final[typing.List[str]] = [
+        "label",
+        "enabled",
+        "visible",
+        "icon-name",
+        "icon-data",
+        "type",
+        "toggle-type",
+        "toggle-state",
+    ]
+    # (SNI signal handler name, what changed)
+    SIGNALS: typing.Final[typing.List[str]] = [
+        "on_new_icon",
+        "on_new_attention_icon",
+        "on_new_status",
+        "on_new_title",
+        "on_new_tool_tip",
+    ]
 
     def __init__(
         self,
@@ -367,100 +260,130 @@ class StatusNotifierItem(BasePlugin):
         object_path: str,
         panel_instance: typing.Any,
     ):
-        """
-        Initialize the StatusNotifierItem proxy.
-        """
         super().__init__(panel_instance)
         self.bus: MessageBus = bus
-        self.ipc_client = self.plugins["event_manager"].ipc_client
         self.service_name: str = service_name
         self.object_path: str = object_path
-        self.icon_name: typing.Optional[str] = None
-        self.icon_pixmap: typing.Optional[typing.Tuple] = None
-        self.is_hidden: bool = False
+        self.item_id: str = f"{service_name}{object_path}"
         self.item: typing.Any = None
         self.proxy_object: typing.Any = None
-        self.menu_object_path: str = ""
-        self.menu_proxy: typing.Optional[DBusMenuProxy] = None
+        # cached properties
+        self.icon_name: str = ""
+        self.icon_pixmap: typing.Optional[list] = None
+        self.attention_icon_name: str = ""
+        self.attention_icon_pixmap: typing.Optional[list] = None
+        self.icon_theme_path: str = ""
+        self.status: str = "Active"
+        self.title: str = ""
+        self.tooltip: typing.Tuple[str, str] = ("", "")
+        self.item_is_menu: bool = False
+        self.menu_path: str = ""
+        # dbusmenu (created on first use, subscribed once)
+        self._dbusmenu: typing.Any = None
+        self.on_layout_changed: typing.Optional[typing.Callable[[], None]] = None
+        self._removed = False
 
-    async def broadcast_message(self, message: typing.Dict[str, typing.Any]):
-        """
-        Broadcast a custom message to all connected clients via the IPC server.
-        """
-        try:
-            self.ipc_server.handle_msg(message)
-        except Exception as e:
-            self.logger.error(f"Failed to broadcast message: {e}")
-
-    def get_new_icon_message(self) -> typing.Dict[str, typing.Any]:
+    # ------------------------------------------------------------ messages
+    def get_message(self) -> typing.Dict[str, typing.Any]:
         return {
             "event": "tray_icon_name_updated",
             "data": {
+                "item_id": self.item_id,
                 "service_name": self.service_name,
                 "object_path": self.object_path,
+                "item": self,
                 "icon_name": self.icon_name,
                 "icon_pixmap": self.icon_pixmap,
-                "item": self.item,
-                "bus": self.bus,
+                "attention_icon_name": self.attention_icon_name,
+                "attention_icon_pixmap": self.attention_icon_pixmap,
+                "icon_theme_path": self.icon_theme_path,
+                "status": self.status,
+                "title": self.title,
+                "tooltip": self.tooltip,
+                "item_is_menu": self.item_is_menu,
             },
         }
 
-    async def on_new_tray_icon(self):
-        """Callback for the NewIcon signal."""
-        message = self.get_new_icon_message()
-        await self.broadcast_message(message)
+    async def announce(self):
+        """Tell the tray widget about this item (new item or changed icon)."""
+        if self._removed:
+            return
+        try:
+            self.ipc_server.handle_msg(self.get_message())
+        except Exception as e:
+            self.logger.error(f"Failed to broadcast tray update: {e}")
 
-    async def _tray_icon_removed(self):
-        message = {
-            "event": "tray_icon_removed",
-            "data": {
-                "service_name": self.service_name,
-                "object_path": self.object_path,
-                "icon_name": self.icon_name,
-            },
-        }
-        await self.broadcast_message(message)
+    def announce_removed(self):
+        self._removed = True
+        try:
+            self.ipc_server.handle_msg(
+                {
+                    "event": "tray_icon_removed",
+                    "data": {
+                        "item_id": self.item_id,
+                        "service_name": self.service_name,
+                        "object_path": self.object_path,
+                    },
+                }
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to broadcast tray removal: {e}")
+
+    # --------------------------------------------------------- properties
+    async def _get(self, prop: str, default: Any = None) -> Any:
+        """Read optional property ``prop`` (snake_case) from the item."""
+        getter = getattr(self.item, f"get_{prop}", None)
+        if getter is None:
+            return default
+        try:
+            return await getter()
+        except Exception:
+            return default
+
+    @staticmethod
+    def _strip_markup(text: str) -> str:
+        return re.sub(r"<[^>]*>", "", text or "").strip()
+
+    async def refresh_properties(self):
+        self.icon_name = await self._get("icon_name", "") or ""
+        self.icon_pixmap = await self._get("icon_pixmap") or None
+        self.attention_icon_name = await self._get("attention_icon_name", "") or ""
+        self.attention_icon_pixmap = await self._get("attention_icon_pixmap") or None
+        self.icon_theme_path = await self._get("icon_theme_path", "") or ""
+        self.status = await self._get("status", "Active") or "Active"
+        self.title = await self._get("title", "") or ""
+        self.item_is_menu = bool(await self._get("item_is_menu", False))
+        menu_path = await self._get("menu", "") or ""
+        self.menu_path = str(menu_path)
+        tip = await self._get("tool_tip")
+        if tip and len(tip) >= 4:
+            self.tooltip = (self._strip_markup(tip[2]), self._strip_markup(tip[3]))
+        else:
+            self.tooltip = (self.title, "")
 
     async def _is_service_name_valid(self) -> bool:
-        """
-        Checks if the D-Bus service name of this item is currently owned.
-        FIX: Implemented D-Bus ownership check to prevent retries on dead services.
-        """
+        """The name must still have an owner, otherwise retrying is pointless."""
         try:
-            await self.bus.call(
+            reply = await self.bus.call(
                 Message(
-                    message_type=MessageType.METHOD_CALL,
                     destination="org.freedesktop.DBus",
-                    interface="org.freedesktop.DBus",
                     path="/org/freedesktop/DBus",
-                    member="GetNameOwner",
+                    interface="org.freedesktop.DBus",
+                    member="NameHasOwner",
                     signature="s",
                     body=[self.service_name],
                 )
             )
-            return True
-        except DBusError as e:
-            self.logger.info(
-                f"D-Bus service {self.service_name} is no longer active: {e.__class__.__name__}"
-            )
-            return False
+            return bool(reply.message_type == MessageType.METHOD_RETURN and reply.body[0])
         except Exception as e:
-            self.logger.error(
-                f"Unexpected error during service validation for {self.service_name}: {e}"
-            )
+            self.logger.error(f"Service validation failed for {self.service_name}: {e}")
             return False
 
-    async def initialize(self, broadcast: bool = True) -> bool:
-        """
-        Resilient initialization of the StatusNotifierItem proxy, with 10 retries.
-        FIXED: Added check for D-Bus service ownership to prevent retrying stale names.
-        """
-        last_exception: typing.Optional[Exception] = None
+    async def initialize(self) -> bool:
+        """Connect to the item (retrying: apps register before they are ready)."""
         for attempt in range(1, self.MAX_ATTEMPTS + 1):
             if not await self._is_service_name_valid():
-                self.logger.info(
-                    f"Aborting initialization for {self.service_name}. Service is no longer owned."
-                )
+                self.logger.info(f"{self.service_name} is gone, aborting init.")
                 return False
             try:
                 introspection = await self.bus.introspect(
@@ -476,61 +399,139 @@ class StatusNotifierItem(BasePlugin):
                         break
                     except Exception:
                         continue
-                if not self.item:
-                    raise ValueError("No matching StatusNotifierItem interface found.")
-                self.icon_name = await self.item.get_icon_name()
-                if hasattr(self.item, "get_icon_pixmap"):
-                    self.icon_pixmap = await self.item.get_icon_pixmap()
-                if broadcast:
-                    await self.on_new_tray_icon()
+                if self.item is None:
+                    raise ValueError("No StatusNotifierItem interface found.")
+                await self.refresh_properties()
+                self._connect_signals()
                 self.logger.info(
-                    f"Initialized StatusNotifierItem for {self.service_name}{self.object_path} on attempt {attempt}"
+                    f"Initialized tray item {self.item_id} on attempt {attempt}"
                 )
                 return True
             except Exception as e:
-                last_exception = e
                 self.logger.warning(
-                    f"Initialization attempt {attempt} failed for {self.service_name}{self.object_path}: {e.__class__.__name__}. Retrying...",
+                    f"Init attempt {attempt} failed for {self.item_id}: "
+                    f"{e.__class__.__name__}"
                 )
             if attempt < self.MAX_ATTEMPTS:
                 await asyncio.sleep(self.RETRY_DELAY)
-            else:
-                error_msg = f"Initialization failed after {self.MAX_ATTEMPTS} attempts."
-                if last_exception:
-                    error_msg += f" Last error: {last_exception.__class__.__name__}"
-                self.logger.error(error_msg)
-                return False
+        self.logger.error(f"Giving up on tray item {self.item_id}")
         return False
 
-    async def get_context_menu_model(self) -> typing.Optional["typing.Any"]:
-        """
-        Fetches the 'Menu' property, connects to the com.canonical.dbusmenu service,
-        and converts the proprietary structure into a standard Gio.MenuModel.
-        """
-        if not self.item:
-            if not await self.initialize(broadcast=False):
-                return None
-        if not self.menu_object_path:
-            try:
-                menu_path: str = await self.item.get_menu()
-                if not menu_path or menu_path == "/":
-                    return None
-                self.menu_object_path = menu_path
-            except Exception as e:
-                self.logger.error(
-                    f"Failed to fetch 'Menu' property for {self.service_name}: {e}"
-                )
-                return None
-        if self.menu_object_path and not self.menu_proxy:
-            self.menu_proxy = DBusMenuProxy(
-                self.bus, self.service_name, self.menu_object_path, self.logger
-            )
-            if not await self.menu_proxy.initialize():
-                self.menu_proxy = None
-                return None
-        if self.menu_proxy:
-            dbus_menu_data = await self.menu_proxy.fetch_menu_layout()
-            if dbus_menu_data is None:
-                return None
-            return dbus_menu_to_gio_model(dbus_menu_data)
-        return None
+    def _connect_signals(self):
+        """Icons/status/tooltips change at runtime (unread badges, sync state)."""
+        for name in self.SIGNALS:
+            subscribe = getattr(self.item, name, None)
+            if subscribe is not None:
+                subscribe(self._on_item_changed)
+
+    def _on_item_changed(self, *_args):
+        asyncio.ensure_future(self._refresh_and_announce())
+
+    async def _refresh_and_announce(self):
+        if self._removed:
+            return
+        try:
+            await self.refresh_properties()
+            await self.announce()
+        except Exception as e:
+            self.logger.error(f"Could not refresh {self.item_id}: {e}")
+
+    # ------------------------------------------------------------- clicks
+    async def _call(self, method_name: str, *args) -> bool:
+        func = getattr(self.item, f"call_{method_name}", None)
+        if func is None:
+            return False
+        try:
+            await func(*args)
+            return True
+        except Exception as e:
+            self.logger.warning(f"{method_name} failed for {self.item_id}: {e}")
+            return False
+
+    async def activate(self, x: int = 0, y: int = 0) -> bool:
+        return await self._call("activate", x, y)
+
+    async def secondary_activate(self, x: int = 0, y: int = 0) -> bool:
+        return await self._call("secondary_activate", x, y)
+
+    async def context_menu(self, x: int = 0, y: int = 0) -> bool:
+        return await self._call("context_menu", x, y)
+
+    async def scroll(self, delta: int, orientation: str = "vertical") -> bool:
+        return await self._call("scroll", delta, orientation)
+
+    # ----------------------------------------------------------- dbusmenu
+    async def _get_dbusmenu(self):
+        if self._dbusmenu is not None:
+            return self._dbusmenu
+        if not self.menu_path or self.menu_path == "/":
+            return None
+        introspection = await self.bus.introspect(self.service_name, self.menu_path)
+        proxy = self.bus.get_proxy_object(
+            self.service_name, self.menu_path, introspection
+        )
+        iface = proxy.get_interface("com.canonical.dbusmenu")
+        # Subscribe exactly once; re-subscribing on every rebuild stacked up
+        # handlers and caused rebuild storms.
+        iface.on_layout_updated(self._on_layout_updated)
+        self._dbusmenu = iface
+        return iface
+
+    def _on_layout_updated(self, *_args):
+        if self.on_layout_changed:
+            self.on_layout_changed()
+
+    async def fetch_menu_layout(self) -> typing.List[dict]:
+        """Current menu as a nested list of dicts ([] if the item has none)."""
+        iface = await self._get_dbusmenu()
+        if iface is None:
+            return []
+        try:
+            await iface.call_about_to_show(0)  # apps fill menus lazily
+        except Exception:
+            pass
+        _revision, layout = await iface.call_get_layout(0, -1, self.MENU_PROPS)
+        return self.parse_layout(layout)
+
+    @classmethod
+    def parse_layout(cls, layout) -> typing.List[dict]:
+        """(ia{sv}av) root -> list of child item dicts."""
+        _id, _props, children = layout
+        return cls._parse_children(children)
+
+    @classmethod
+    def _parse_children(cls, children) -> typing.List[dict]:
+        items: typing.List[dict] = []
+        for child in children or []:
+            value = child.value if isinstance(child, Variant) else child
+            item_id, properties, grand_children = value
+            props = {
+                k: (v.value if isinstance(v, Variant) else v)
+                for k, v in properties.items()
+            }
+            entry = {
+                "id": item_id,
+                "type": props.get("type", "standard"),
+                "label": props.get("label", ""),
+                "enabled": props.get("enabled", True),
+                "visible": props.get("visible", True),
+                "icon_name": props.get("icon-name"),
+                "icon_data": props.get("icon-data"),
+                "toggle_type": props.get("toggle-type", ""),
+                "toggle_state": props.get("toggle-state", -1),
+            }
+            if grand_children:
+                entry["submenu"] = cls._parse_children(grand_children)
+            items.append(entry)
+        return items
+
+    async def menu_event(self, menu_item_id: int, event: str = "clicked") -> bool:
+        iface = await self._get_dbusmenu()
+        if iface is None:
+            return False
+        try:
+            await iface.call_event(menu_item_id, event, Variant("s", ""), 0)
+            return True
+        except DBusError as e:
+            self.logger.warning(f"Menu event failed for {self.item_id}: {e}")
+            return False
