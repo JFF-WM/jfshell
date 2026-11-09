@@ -13,17 +13,42 @@
   border: 1px solid var(--color-separator-line);
 }
 
-/* Dashboard action buttons */
+/* Device rows (Gtk.Box with a click gesture, not real buttons) */
 .bluetooth-dashboard-buttons {
-  background-color: var(--color-bg-button-normal);
-  border-radius: var(--radius-m);
+  min-width: 240px;
+  padding: 8px 12px;
+  margin: 2px 0;
+  background-color: var(--theme-bg-view-secondary);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-l);
+  color: var(--theme-fg-label-primary);
+  box-shadow: none;
+  transition: all 150ms ease-out;
+}
+
+.bluetooth-dashboard-buttons label {
+  color: var(--theme-fg-label-primary);
+}
+
+.bluetooth-dashboard-buttons image {
+  color: var(--theme-fg-label-secondary);
 }
 
 .bluetooth-dashboard-buttons:hover {
-  background-color: var(--color-bg-button-normal-hover);
+  background-color: var(--color-bg-button-flat-hover);
 }
 
+/* Connected: quiet accent (border + icon) instead of a loud filled pill */
 .bluetooth-dashboard-buttons-connected {
-  background-color: var(--theme-bg-selected-primary);
-  color: var(--theme-fg-text-selected);
+  background-color: var(--theme-bg-view-secondary);
+  border-color: var(--theme-status-accent);
+  box-shadow: inset 3px 0 0 0 var(--theme-status-accent);
+}
+
+.bluetooth-dashboard-buttons-connected image {
+  color: var(--theme-status-accent);
+}
+
+.bluetooth-dashboard-buttons-connected:hover {
+  background-color: var(--color-bg-button-flat-hover);
 }

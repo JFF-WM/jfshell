@@ -9,8 +9,15 @@
 }
 
 .notify-client-box {
-  padding: 10px;
-  background: transparent;
+  padding: 10px 12px;
+  background-color: var(--theme-bg-view-secondary);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-l);
+  box-shadow: var(--shadow-small);
+}
+
+.notify-client-box:hover {
+  background-color: var(--color-bg-button-flat-hover);
 }
 
 .notify-client-heading {
@@ -79,4 +86,80 @@ window.notify-window,
 
 .notification-action-button {
   background-color: var(--color-bg-button-normal);
+}
+
+
+/* Popover shell + list of cards */
+.notify-popover.background > contents {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-window-float);
+}
+
+.notify-popover.background > arrow {
+  background-color: var(--color-bg-popover);
+  border: 1px solid var(--color-separator-line);
+}
+
+.notify-client-list {
+  background: transparent;
+}
+
+/* Cards replace the old separator lines */
+.notify-client-separator {
+  min-height: 0;
+  opacity: 0;
+  margin: 0;
+}
+
+.notify-client-left {
+  min-width: 56px;
+}
+
+.notify-client-app-label {
+  font-size: 11px;
+  color: var(--theme-fg-label-secondary);
+}
+
+.notify-client-heading {
+  font-size: 13px;
+}
+
+.notify-close-button {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border-radius: 999px;
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+}
+
+.notify-close-button:hover {
+  background-color: var(--color-bg-button-flat-hover);
+  color: var(--theme-status-danger);
+}
+
+.notify-bottom-box {
+  padding-top: 8px;
+  border-top: 1px solid var(--color-separator-line);
+}
+
+.notify-dnd-button,
+.notify-clear-button {
+  padding: 6px 14px;
+  border-radius: var(--radius-m);
+  background-color: var(--color-bg-button-normal);
+  background-image: none;
+  box-shadow: none;
+}
+
+.notify-dnd-button:hover,
+.notify-clear-button:hover {
+  background-color: var(--color-bg-button-normal-hover);
+}
+
+.notify-clear-button:hover {
+  color: var(--theme-status-danger);
 }

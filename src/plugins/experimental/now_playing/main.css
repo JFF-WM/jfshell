@@ -28,8 +28,8 @@
 
 .player-art {
   border-radius: var(--radius-l);
-  min-width: 64px;
-  min-height: 64px;
+  min-width: 120px;
+  min-height: 120px;
 }
 
 .player-art-btn,
@@ -62,4 +62,65 @@
 .player-controls button {
   -gtk-icon-size: 20px;
   border-radius: var(--radius-m);
+}
+
+
+/* Artwork: clip to rounded corners, no button padding around it */
+.player-art-btn {
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--radius-l);
+  box-shadow: 0 4px 12px var(--shadow-dark);
+}
+
+.player-art-btn:hover {
+  background-color: transparent;
+  box-shadow: 0 6px 16px var(--shadow-dark), 0 0 0 1px var(--theme-status-accent);
+}
+
+.player-title,
+.player-artist {
+  margin: 0 8px;
+}
+
+.player-title {
+  font-size: 14px;
+  margin-top: 10px;
+}
+
+.player-popover-content {
+  min-width: 220px;
+}
+
+/* Transport controls: round buttons, filled play button */
+.player-control-btn {
+  min-width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: 999px;
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+  -gtk-icon-size: 18px;
+}
+
+.player-control-btn:hover {
+  background-color: var(--color-bg-button-flat-hover);
+}
+
+.player-play-btn {
+  min-width: 42px;
+  min-height: 42px;
+  background-color: var(--theme-bg-selected-primary);
+  box-shadow: 0 2px 8px var(--shadow-dark);
+  -gtk-icon-size: 22px;
+}
+
+.player-play-btn image {
+  color: var(--theme-fg-text-selected);
+}
+
+.player-play-btn:hover {
+  background-color: var(--theme-bg-selected-primary);
+  box-shadow: 0 0 0 2px var(--theme-status-accent), 0 4px 12px var(--shadow-dark);
 }
