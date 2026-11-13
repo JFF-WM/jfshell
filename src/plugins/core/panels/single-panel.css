@@ -1,0 +1,55 @@
+/* Single panel: bottom bar. Colors come from the active theme variables. */
+
+.single-panel {
+  background-color: var(--color-bg-panel);
+  border-top: 1px solid var(--color-separator-line);
+  box-shadow: 0 -4px 14px var(--color-shadow-lighter);
+  color: var(--main-text);
+  font-family: var(--font-family-default, sans-serif);
+  font-weight: var(--font-weight-medium, normal);
+}
+
+.single-panel-full {
+  padding: 2px 6px;
+  background: transparent;
+}
+
+.single-panel-start,
+.single-panel-end,
+.single-panel-systray,
+.single-panel-buttons,
+.single-panel-clock {
+  padding: 0 4px;
+}
+
+.single-panel-center {
+  padding: 0 6px;
+}
+
+/* Taskbar buttons are styled by the single_taskbar plugin. */
+
+.single-panel button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-s, 4px);
+  box-shadow: none;
+  color: var(--main-text);
+}
+
+.single-panel button:hover {
+  background-color: var(--color-bg-button-flat-hover, var(--color-bg-transparent-active));
+  border-color: var(--color-separator-line);
+}
+
+.single-panel button:active {
+  background-color: var(--color-bg-button-active);
+}
+
+/* Clock lives at the far right edge of the panel */
+.single-panel-clock {
+  padding: 0 4px 0 2px;
+}
+
+.single-panel-clock .clock-label {
+  margin-right: 0;
+}
