@@ -195,7 +195,7 @@ def get_plugin_class():
                 return
             view = self.plugin.compositor_helper.get_view_by_pid(self.current_pid)
             if view and "id" in view:
-                self.plugin.ipc.close_view(view["id"])
+                self.plugin.ipc.close_window(view["id"])
 
         def _create_btn(self, icon, action):
             """

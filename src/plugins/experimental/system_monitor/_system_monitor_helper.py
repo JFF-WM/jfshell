@@ -330,7 +330,7 @@ class SystemMonitorHelpers:
         code = (
             "from src.core.compositor.ipc import IPC; "
             "sock = IPC(); "
-            f"view = sock.get_view({view_id}); "
+            f"view = sock.get_window({view_id}); "
         )
         self.run_cmd(f"{term} {flag} ipython -i -c {shlex.quote(code)}")
 
@@ -342,7 +342,7 @@ class SystemMonitorHelpers:
             view_id: The ID of the view to inspect via IPC.
         """
         try:
-            view = self.ipc.get_view(view_id)
+            view = self.ipc.get_window(view_id)
             if not view:
                 return
             window = self.gtk.Window(title=f"View Information (ID: {view_id})")

@@ -57,7 +57,7 @@ class TaskbarMenu:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         box.set_margin_end(8)
 
-        view_data = self.ipc.get_view(widget.view_id)
+        view_data = self.ipc.get_window(widget.view_id)
         if not view_data:
             return
 
@@ -135,11 +135,20 @@ class TaskbarMenu:
         import os
         import signal
 
-        view_data = self.ipc.get_view(vid)
+        view_data = self.ipc.get_window(vid)
         if not view_data or "pid" not in view_data:
             return
 
         pid = view_data.get("pid")
+        # os.kill() treats some PIDs as groups: -1 signals every process this
+        # user owns (the compositor and this panel included), 0 signals our
+        # whole process group. The jff IPC reports -1 when it does not know a
+        # window's PID, so only a real, positive PID may get a signal.
+        if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 1:
+            return
+        # Never freeze ourselves or the process that launched us (the compositor).
+        if pid in (os.getpid(), os.getppid()):
+            return
         try:
             sig = signal.SIGSTOP if stop else signal.SIGCONT
             os.kill(pid, sig)
@@ -148,7 +157,7 @@ class TaskbarMenu:
 
     def _toggle_audio_mute(self, vid, mute):
         """Finds all audio streams for the PID and sets mute state via PulseAudio."""
-        view_data = self.ipc.get_view(vid)
+        view_data = self.ipc.get_window(vid)
         if not view_data or "pid" not in view_data:
             return
 
@@ -186,20 +195,20 @@ class TaskbarMenu:
 
     def _on_menu_fullscreen_clicked(self, _):
         vid = self.menu.active_view_id  # pyright: ignore
-        current = self.ipc.get_view(vid)["fullscreen"]
-        self.ipc.set_view_fullscreen(vid, not current)
+        current = self.ipc.get_window(vid)["fullscreen"]
+        self.ipc.set_window_fullscreen(vid, not current)
         self.menu.popdown()
 
     def _on_menu_atop_clicked(self, _):
         vid = self.menu.active_view_id  # pyright: ignore
-        current = self.ipc.get_view(vid)["always-on-top"]
-        self.ipc.set_view_always_on_top(vid, not current)
+        current = self.ipc.get_window(vid)["always-on-top"]
+        self.ipc.set_window_always_on_top(vid, not current)
         self.menu.popdown()
 
     def _on_menu_sticky_clicked(self, _):
         vid = self.menu.active_view_id  # pyright: ignore
-        current = self.ipc.get_view(vid)["sticky"]
-        self.ipc.set_view_sticky(vid, not current)
+        current = self.ipc.get_window(vid)["sticky"]
+        self.ipc.set_window_sticky(vid, not current)
         self.menu.popdown()
 
     def _on_menu_move_next_clicked(self, _):
@@ -218,6 +227,6 @@ class TaskbarMenu:
         from gi.repository import GLib
 
         vid = self.menu.active_view_id  # pyright: ignore
-        self.ipc.close_view(vid)
+        self.ipc.close_window(vid)
         self.menu.popdown()
         GLib.timeout_add_seconds(3, self._check_hanging_process, vid)

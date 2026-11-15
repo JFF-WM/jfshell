@@ -59,17 +59,17 @@ class EventServer:
     def _translate(cls, ev: dict, state: dict) -> Iterator[dict]:
         """Turn one jff ``watch`` event into the panel's internal events.
 
-        ``state`` is owned by ``read_events`` (``views``: id -> last known view,
+        ``state`` is owned by ``read_events`` (``windows``: id -> last known window,
         ``overview``: bool). Internal names: view-mapped, view-unmapped,
         view-focused, view-title-changed, view-app-id-changed,
         workspace-changed, overview-changed, view-drag-changed.
         """
         kind = ev.get("event")
-        views: dict = state["views"]
+        views: dict = state["windows"]
 
         if kind == "snapshot":
             old = dict(views)
-            new = {v["id"]: v for v in ev.get("views", [])}
+            new = {v["id"]: v for v in ev.get("windows", [])}
             views.clear()
             views.update(new)
             for vid, v in new.items():
@@ -84,11 +84,11 @@ class EventServer:
                 state["overview"] = bool(ev["overview"])
                 yield cls._overview_msg(state["overview"])
 
-        elif kind == "view-opened":
+        elif kind == "window-opened":
             views[ev["id"]] = ev
             yield {"event": "view-mapped", "view": cls._view_msg(ev)}
 
-        elif kind == "view-closed":
+        elif kind == "window-closed":
             v = views.pop(ev["id"], {"id": ev["id"]})
             yield {"event": "view-unmapped", "view": cls._view_msg(v)}
 
@@ -117,7 +117,7 @@ class EventServer:
         elif kind in ("maximized", "fullscreen") and ev["id"] in views:
             views[ev["id"]][kind] = bool(ev.get("on"))
 
-        elif kind == "view-workspace" and ev["id"] in views:
+        elif kind == "window-workspace" and ev["id"] in views:
             views[ev["id"]]["workspace"] = ev.get("workspace")
 
         elif kind == "geometry" and ev["id"] in views:
@@ -170,7 +170,7 @@ class EventServer:
 
     def read_events(self) -> None:
         """Follow jff's ``watch`` stream (no polling) and feed ``event_queue``."""
-        state: dict[str, Any] = {"views": {}, "overview": False}
+        state: dict[str, Any] = {"windows": {}, "overview": False}
         while not self._stopping.is_set():
             if not self.is_socket_active():
                 time.sleep(2)

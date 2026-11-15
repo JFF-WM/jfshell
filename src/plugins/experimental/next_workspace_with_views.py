@@ -61,7 +61,7 @@ def get_plugin_class():
 
             workspaces = self.ipc.list_workspaces()
 
-            windows = self.ipc.list_views()
+            windows = self.ipc.list_windows()
 
             # Find the monitor currently holding focus
 

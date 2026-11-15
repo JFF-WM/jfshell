@@ -453,7 +453,7 @@ def get_plugin_class():
         def view_id_found(self, title="Configuration"):
             return [
                 i["id"]
-                for i in self.ipc.list_views()
+                for i in self.ipc.list_windows()
                 if i["app-id"] == "org.jfshell" and i["title"] == title
             ]
 

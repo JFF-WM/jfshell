@@ -293,7 +293,7 @@ def get_monitor_name(config):
         r = jff_msg("status")
         if r.get("ok"):
             names = sorted(
-                {v.get("output") for v in r.get("views", []) if v.get("output")}
+                {v.get("output") for v in r.get("windows", []) if v.get("output")}
             )
             if names:
                 return names[0]

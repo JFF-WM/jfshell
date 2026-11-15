@@ -103,7 +103,7 @@ def app_candidates(notification: Dict[str, Any]) -> List[str]:
 
 def _find_view(panel, candidates: List[str]) -> Optional[dict]:
     try:
-        views = panel.ipc.list_views() or []
+        views = panel.ipc.list_windows() or []
     except Exception:
         return None
     best = None

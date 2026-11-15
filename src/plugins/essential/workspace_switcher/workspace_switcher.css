@@ -1,0 +1,32 @@
+.workspace-switcher {
+  padding: 0 4px;
+}
+
+.workspace-button {
+  min-width: 22px;
+  min-height: 22px;
+  margin-top: 5px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--main-text);
+  background-color: transparent;
+}
+
+.workspace-button:hover {
+  background-color: var(--hover-bg, rgba(255, 255, 255, 0.1));
+}
+
+.workspace-button.workspace-has-views {
+  border-bottom: 2px solid var(--theme-status-accent, #3b82f6);
+}
+
+.workspace-button.workspace-active {
+  background-color: var(--theme-status-accent, #3b82f6);
+  color: var(--theme-status-accent-foreground, #ffffff);
+}
+
+.workspace-button.workspace-active.workspace-has-views {
+  border-bottom-color: transparent;
+}

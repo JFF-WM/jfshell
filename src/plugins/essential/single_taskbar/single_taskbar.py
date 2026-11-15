@@ -118,10 +118,10 @@ def get_plugin_class():
                 GLib.source_remove(self._debounce_timer_id)
                 self._debounce_timer_id = None
             self._debounce_pending = False
-            # One IPC round trip: get_focused_view() calls list_views() again
+            # One IPC round trip: get_focused_window() calls list_windows() again
             # internally, so derive the focused window from the list we have.
             views = [
-                v for v in self.ipc.list_views() if self.view_handler.is_valid_view(v)
+                v for v in self.ipc.list_windows() if self.view_handler.is_valid_view(v)
             ]
             focused_id = next((v.get("id") for v in views if v.get("is_focused")), None)
 
@@ -197,7 +197,7 @@ def get_plugin_class():
 
         def _on_primary_click(self, button, identifier):
             views = [
-                v for v in self.ipc.list_views() if self.view_handler.is_valid_view(v)
+                v for v in self.ipc.list_windows() if self.view_handler.is_valid_view(v)
             ]
             target_views = [
                 v

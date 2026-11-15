@@ -41,7 +41,7 @@ class SingleTaskbarViews:
     def restore_group_focus(self, identifier):
         """Logic for middle-click restoration of last known view in a group."""
         # Use jff specific list_windows logic
-        views = [v for v in self.plugin.ipc.list_views() if self.is_valid_view(v)]
+        views = [v for v in self.plugin.ipc.list_windows() if self.is_valid_view(v)]
         target_views = [
             v
             for v in views
@@ -87,7 +87,7 @@ class SingleTaskbarViews:
 
     def cycle_group_focus(self, identifier, direction):
         """Cycles focus among views in a jff group."""
-        views = [v for v in self.plugin.ipc.list_views() if self.is_valid_view(v)]
+        views = [v for v in self.plugin.ipc.list_windows() if self.is_valid_view(v)]
         target_views = [
             v
             for v in views

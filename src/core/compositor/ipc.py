@@ -69,7 +69,7 @@ def jff_msg(cmd: str, timeout: float = 2.0) -> dict:
 def jff_snapshot(groups: Sequence[str] = (), timeout: float = 2.0) -> dict:
     """Return the ``snapshot`` event jff sends first on ``watch [GROUP...]``.
 
-    One-shot commands (``status``, ``views``...) don't report outputs, layers or
+    One-shot commands (``status``, ``windows``...) don't report outputs, layers or
     the overview, the watch snapshot does. The connection is closed right after
     the first line, so nothing keeps streaming.
     """
@@ -262,15 +262,15 @@ class IPC:
         return False
 
     @handle_ipc_error
-    def list_views(self) -> List[Dict[str, Any]]:
+    def list_windows(self) -> List[Dict[str, Any]]:
         r = jff_msg("status")
         if not r.get("ok"):
             return []
-        return [self._view_to_jfshell(v) for v in r.get("views", [])]
+        return [self._window_to_jfshell(v) for v in r.get("windows", [])]
 
     @handle_ipc_error
     def get_windows(self):
-        return self.list_views()
+        return self.list_windows()
 
     @handle_ipc_error
     def list_workspaces(self) -> List[Dict[str, Any]]:
@@ -310,18 +310,18 @@ class IPC:
         return "jff"
 
     @handle_ipc_error
-    def get_focused_view(self) -> Optional[Dict[str, Any]]:
+    def get_focused_window(self) -> Optional[Dict[str, Any]]:
         r = jff_msg("focused")
-        if not r.get("ok") or not r.get("view"):
+        if not r.get("ok") or not r.get("window"):
             return None
-        return self._view_to_jfshell(r["view"])
+        return self._window_to_jfshell(r["window"])
 
     @handle_ipc_error
-    def get_view(self, id: int) -> Optional[Dict[str, Any]]:
-        r = jff_msg(f"view-info {int(id)}")
-        if not r.get("ok") or not r.get("view"):
+    def get_window(self, id: int) -> Optional[Dict[str, Any]]:
+        r = jff_msg(f"window-info {int(id)}")
+        if not r.get("ok") or not r.get("window"):
             return None
-        return self._view_to_jfshell(r["view"])
+        return self._window_to_jfshell(r["window"])
 
     @handle_ipc_error
     def get_active_workspace_number(self) -> Optional[int]:
@@ -342,30 +342,30 @@ class IPC:
 
     @handle_ipc_error
     def get_focused_output(self) -> Optional[Dict[str, Any]]:
-        fv = self.get_focused_view()
+        fv = self.get_focused_window()
         if not fv or not fv.get("output"):
             return None
         name = fv["output"]
         return self.get_output(name) or {"name": name, "id": name}
 
     @handle_ipc_error
-    def get_workspace_views(self) -> List[Dict[str, Any]]:
+    def get_workspace_windows(self) -> List[Dict[str, Any]]:
         cur = self.get_active_workspace_number()
         if cur is None:
             return []
-        return [v for v in self.list_views() if v.get("workspace") == cur]
+        return [v for v in self.list_windows() if v.get("workspace") == cur]
 
     @handle_ipc_error
     def get_workspace_by_name(self, name: str):
         return None
 
     @handle_ipc_error
-    def close_view(self, view_id: int) -> bool:
-        return bool(jff_msg(f"close {int(view_id)}").get("ok"))
+    def close_window(self, window_id: int) -> bool:
+        return bool(jff_msg(f"close {int(window_id)}").get("ok"))
 
     @handle_ipc_error
-    def set_focus(self, view_id: int) -> bool:
-        return bool(jff_msg(f"focus {int(view_id)}").get("ok"))
+    def set_focus(self, window_id: int) -> bool:
+        return bool(jff_msg(f"focus {int(window_id)}").get("ok"))
 
     @handle_ipc_error
     def focus_workspace(self, number: int) -> bool:
@@ -384,52 +384,52 @@ class IPC:
         return bool(jff_msg("workspace next").get("ok"))
 
     @handle_ipc_error
-    def move_window_to_workspace(self, ws_reference, view_id=None) -> bool:
+    def move_window_to_workspace(self, ws_reference, window_id=None) -> bool:
         n = ws_reference if isinstance(ws_reference, int) else int(str(ws_reference))
         cmd = f"move-to-workspace {n}" + (
-            f" {int(view_id)}" if view_id is not None else ""
+            f" {int(window_id)}" if window_id is not None else ""
         )
         return bool(jff_msg(cmd).get("ok"))
 
     @handle_ipc_error
-    def fullscreen_window(self, view_id=None) -> bool:
-        cmd = "fullscreen" + (f" {int(view_id)}" if view_id is not None else "")
+    def fullscreen_window(self, window_id=None) -> bool:
+        cmd = "fullscreen" + (f" {int(window_id)}" if window_id is not None else "")
         return bool(jff_msg(cmd).get("ok"))
 
     @handle_ipc_error
-    def maximize_column(self, view_id=None) -> bool:
-        cmd = "maximize" + (f" {int(view_id)}" if view_id is not None else "")
+    def maximize_column(self, window_id=None) -> bool:
+        cmd = "maximize" + (f" {int(window_id)}" if window_id is not None else "")
         return bool(jff_msg(cmd).get("ok"))
 
     @handle_ipc_error
-    def set_view_fullscreen(self, view_id, on: bool = True) -> bool:
+    def set_window_fullscreen(self, window_id, on: bool = True) -> bool:
         cmd = ("fullscreen" if on else "unfullscreen") + (
-            f" {int(view_id)}" if view_id is not None else ""
+            f" {int(window_id)}" if window_id is not None else ""
         )
         return bool(jff_msg(cmd).get("ok"))
 
     @handle_ipc_error
-    def set_view_maximized(self, view_id=None, on: bool = True) -> bool:
+    def set_window_maximized(self, window_id=None, on: bool = True) -> bool:
         cmd = ("maximize" if on else "unmaximize") + (
-            f" {int(view_id)}" if view_id is not None else ""
+            f" {int(window_id)}" if window_id is not None else ""
         )
         return bool(jff_msg(cmd).get("ok"))
 
     @handle_ipc_error
-    def set_tiling_maximized(self, view_id, on: bool = True) -> bool:
-        return self.set_view_maximized(view_id, on)
+    def set_tiling_maximized(self, window_id, on: bool = True) -> bool:
+        return self.set_window_maximized(window_id, on)
 
     @handle_ipc_error
-    def get_views_from_active_workspace(self) -> List[int]:
-        return [v["id"] for v in self.get_workspace_views() or []]
+    def get_windows_from_active_workspace(self) -> List[int]:
+        return [v["id"] for v in self.get_workspace_windows() or []]
 
     @handle_ipc_error
-    def set_view_always_on_top(self, view_id, on: bool = True) -> bool:
+    def set_window_always_on_top(self, window_id, on: bool = True) -> bool:
         # jff has no always-on-top state.
         return False
 
     @handle_ipc_error
-    def set_view_sticky(self, view_id, on: bool = True) -> bool:
+    def set_window_sticky(self, window_id, on: bool = True) -> bool:
         # jff has no sticky state.
         return False
 
@@ -486,23 +486,23 @@ class IPC:
         pass
 
     @handle_ipc_error
-    def set_view_alpha(self, *a, **k):
+    def set_window_alpha(self, *a, **k):
         return False
 
     @handle_ipc_error
-    def get_view_alpha(self, view_id):
+    def get_window_alpha(self, window_id):
         return {"alpha": 1.0}
 
     @handle_ipc_error
-    def set_view_property(self, *a, **k):
+    def set_window_property(self, *a, **k):
         return False
 
     @handle_ipc_error
-    def get_view_property(self, *a, **k):
+    def get_window_property(self, *a, **k):
         return None
 
     @handle_ipc_error
-    def configure_view(self, *a, **k):
+    def configure_window(self, *a, **k):
         return False
 
     @handle_ipc_error
@@ -543,7 +543,7 @@ class IPC:
         return False
 
     @handle_ipc_error
-    def toggle_window_floating(self, view_id=None):
+    def toggle_window_floating(self, window_id=None):
         return False
 
     @handle_ipc_error
@@ -631,7 +631,7 @@ class IPC:
         return False
 
     @handle_ipc_error
-    def set_dynamic_cast_window(self, view_id=None):
+    def set_dynamic_cast_window(self, window_id=None):
         return False
 
     @handle_ipc_error
@@ -655,13 +655,13 @@ class IPC:
         return None
 
     @staticmethod
-    def _view_to_jfshell(v: dict) -> dict:
+    def _window_to_jfshell(v: dict) -> dict:
         return {
             "id": v.get("id"),
             "title": v.get("title") or "",
             "app_id": v.get("app_id") or "nil",
             "app-id": v.get("app_id") or "nil",
-            "pid": -1,
+            "pid": v.get("pid", -1),  # -1 = unknown; consumers must not signal it
             "workspace_id": v.get("workspace"),
             "workspace": v.get("workspace"),
             "is_focused": bool(v.get("focused")),

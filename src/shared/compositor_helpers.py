@@ -16,7 +16,7 @@ class CompositorHelpers:
         Initializes the CompositorHelpers instance with an IPC object.
         Args:
             ipc: An object representing the jff IPC connection, which
-                 is expected to have a `list_views()` method.
+                 is expected to have a `list_windows()` method.
         """
         self.ipc = panel_instance.ipc
         self.logger = panel_instance.logger
@@ -35,7 +35,7 @@ class CompositorHelpers:
                   output, otherwise False.
         """
         try:
-            list_views = self.ipc.list_views()
+            list_views = self.ipc.list_windows()
             if not list_views:
                 return False
             return any(
@@ -96,10 +96,10 @@ class CompositorHelpers:
             3. If not, move the view to the focused output.
             4. If yes, calculate the target output using `get_output_from(direction)` and move the view there.
         Dependencies:
-            - `get_view(view_id)`: Fetches the view object containing its geometry and workspace index.
+            - `get_window(view_id)`: Fetches the view object containing its geometry and workspace index.
             - `get_focused_output()`: Retrieves the currently focused output.
             - `get_output_from(direction)`: Determines the target output ID based on the direction.
-            - `configure_view(...)`: Configures the view's position and assigns it to a specific output.
+            - `configure_window(...)`: Configures the view's position and assigns it to a specific output.
         Example:
             send_view_to_output(123, "left")
         Notes:
@@ -107,7 +107,7 @@ class CompositorHelpers:
             - If the view is already on the focused output, the function uses `get_output_from(direction)`
               to determine the target output ID.
         """
-        view = self.ipc.get_view(view_id)
+        view = self.ipc.get_window(view_id)
         geo = view["geometry"]
         focused_output = self.ipc.get_focused_output()
         wset_index_focused = focused_output.get("wset-index")
@@ -120,7 +120,7 @@ class CompositorHelpers:
         if toggle_scale_off:
             self.ipc.scale_toggle(focused_output.get("id"))
         if direction is None and next_output:
-            self.ipc.configure_view(
+            self.ipc.configure_window(
                 view_id,
                 geo["x"],
                 geo["y"],
@@ -129,7 +129,7 @@ class CompositorHelpers:
                 next_output[0],
             )
         if wset_index_focused != wset_index_view:
-            self.ipc.configure_view(
+            self.ipc.configure_window(
                 view_id,
                 geo["x"],
                 geo["y"],
@@ -140,7 +140,7 @@ class CompositorHelpers:
         else:
             if direction:
                 output_direction = self.get_output_from(direction)
-                self.ipc.configure_view(
+                self.ipc.configure_window(
                     view_id,
                     geo["x"],
                     geo["y"],
@@ -153,7 +153,7 @@ class CompositorHelpers:
             tiled_edges = view.get("tiled-edges") == 15
             if tiled_edges:
                 self.ipc.set_focus(view_id)
-                self.ipc.set_view_maximized(view_id)
+                self.ipc.set_window_maximized(view_id)
             return
 
         GLib.timeout_add(100, set_maximized, view_id)
@@ -257,7 +257,7 @@ class CompositorHelpers:
         Returns:
             The result of the IPC configure command.
         """
-        view = self.ipc.get_view(view_id)
+        view = self.ipc.get_window(view_id)
         outputs = self.ipc.list_outputs()
 
         out = next(o for o in outputs if o["id"] == view["output-id"])
@@ -272,7 +272,7 @@ class CompositorHelpers:
         target_x = wa["x"] + (wa["width"] - w) // 2
         target_y = wa["y"] + (wa["height"] - h) // 2
 
-        return self.ipc.configure_view(
+        return self.ipc.configure_window(
             view_id, int(target_x), int(target_y), int(w), int(h)
         )
 
@@ -331,7 +331,7 @@ class CompositorHelpers:
         Args:
             view_id (str): The unique identifier of the view/window.
         """
-        view = self.ipc.get_view(view_id)
+        view = self.ipc.get_window(view_id)
         if not view:
             self.logger.warning(f"View with ID '{view_id}' not found.")
             return
@@ -353,7 +353,7 @@ class CompositorHelpers:
         Returns:
             List[str]: A list of lowercase app IDs (excluding "nil").
         """
-        views = self.ipc.list_views()
+        views = self.ipc.list_windows()
         return [i["app-id"].lower() for i in views if i["app-id"] != "nil"]
 
     def focus_view_when_ready(self, view: dict) -> bool:
@@ -420,7 +420,7 @@ class CompositorHelpers:
             return None
         fetched_view: Optional[Dict[str, Any]] = None
         try:
-            fetched_view = self.ipc.get_view(view_id)
+            fetched_view = self.ipc.get_window(view_id)
             if not fetched_view:
                 self.logger.debug(
                     f"View details not found via IPC for ID: {view_id}. View is likely closed."
@@ -447,7 +447,7 @@ class CompositorHelpers:
         return fetched_view
 
     def tile_maximize_all_from_active_workspace(self, should_maxmize):
-        view_ids = self.ipc.get_views_from_active_workspace()
+        view_ids = self.ipc.get_windows_from_active_workspace()
         [self.ipc.set_tiling_maximized(view_id, should_maxmize) for view_id in view_ids]
 
     def view_focus_effect_selected(
@@ -463,22 +463,24 @@ class CompositorHelpers:
 
         if selected:
             # Only store if we haven't stored it yet to avoid capturing the 'effect' alpha
-            stored = self.ipc.get_view_property(view_id, "original_alpha")
+            stored = self.ipc.get_window_property(view_id, "original_alpha")
             if not stored or (
                 isinstance(stored, dict) and stored.get("result") != "ok"
             ):
-                original_alpha_value = self.ipc.get_view_alpha(view_id)["alpha"]
-                self.ipc.set_view_property(
+                original_alpha_value = self.ipc.get_window_alpha(view_id)["alpha"]
+                self.ipc.set_window_property(
                     view_id, "original_alpha", str(original_alpha_value)
                 )
 
-            self.ipc.set_view_alpha(view_id, alpha)
+            self.ipc.set_window_alpha(view_id, alpha)
         else:
-            stored = self.ipc.get_view_property(view_id, "original_alpha")
+            stored = self.ipc.get_window_property(view_id, "original_alpha")
             if stored:
                 val = stored.get("value") if isinstance(stored, dict) else stored
                 if val:
-                    self.ipc.set_view_alpha(view_id, float(str(val).replace(",", ".")))
+                    self.ipc.set_window_alpha(
+                        view_id, float(str(val).replace(",", "."))
+                    )
 
     def find_redirection_file(self, process_name):
         """
@@ -558,7 +560,7 @@ class CompositorHelpers:
         as jff windows are always mapped or closed.
         """
         try:
-            window = self.ipc.get_focused_view()
+            window = self.ipc.get_focused_window()
 
             if not window:
                 return None
@@ -577,7 +579,7 @@ class CompositorHelpers:
         Returns:
             The most recently focused view dictionary or None if list is empty.
         """
-        views = self.ipc.list_views()
+        views = self.ipc.list_windows()
         if not views:
             return None
 
@@ -604,7 +606,7 @@ class CompositorHelpers:
 
         try:
             # Accessing the IPC socket (sock) and listing all active views
-            all_views = self.ipc.list_views()
+            all_views = self.ipc.list_windows()
 
             # Generator expression to find the first matching view by PID
             return next((view for view in all_views if view.get("pid") == pid), None)
@@ -620,7 +622,7 @@ class CompositorHelpers:
         import subprocess
 
         # Retrieve the current state of the view directly
-        view = self.ipc.get_view(vid)
+        view = self.ipc.get_window(vid)
 
         # If view is gone (None) completely, we are good.
         if not view:
