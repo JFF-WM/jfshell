@@ -123,34 +123,33 @@ class HdrPage:
         card.append(self.switch)
         self.root.append(card)
 
-        body = gtk.Box(orientation=gtk.Orientation.VERTICAL, spacing=10)
-        self.body = body
+        self.stack = gtk.Stack()
+        self.stack.set_transition_type(gtk.StackTransitionType.CROSSFADE)
+        self.stack.set_hexpand(True)
+        self.body = self.stack
         for heading, keys in SECTIONS:
-            label = gtk.Label(label=heading)
-            label.add_css_class("hdr-section")
-            label.set_halign(gtk.Align.START)
-            body.append(label)
+            page = gtk.Box(orientation=gtk.Orientation.VERTICAL, spacing=10)
             for key in keys:
-                body.append(self.slider_row(key, peak_max))
-            if heading == "Color":
-                body.append(self.choice_row("tone-map", "Tone mapping", TONE_MAPS))
-                body.append(self.choice_row("gamut-map", "Gamut mapping", GAMUT_MAPS))
+                page.append(self.slider_row(key, peak_max))
+            self.stack.add_titled(page, heading.lower(), heading)
 
+        mapping = gtk.Box(orientation=gtk.Orientation.VERTICAL, spacing=10)
+        mapping.append(self.choice_row("tone-map", "Tone mapping", TONE_MAPS))
+        mapping.append(self.choice_row("gamut-map", "Gamut mapping", GAMUT_MAPS))
         self.info = gtk.Label(label="")
         self.info.add_css_class("hdr-info")
         self.info.set_xalign(0)
         self.info.set_wrap(True)
         self.info.set_max_width_chars(40)
-        body.append(self.info)
+        mapping.append(self.info)
+        self.stack.add_titled(mapping, "mapping", "Mapping")
 
-        scrolled = gtk.ScrolledWindow()
-        scrolled.set_policy(gtk.PolicyType.NEVER, gtk.PolicyType.AUTOMATIC)
-        scrolled.set_propagate_natural_height(True)
-        scrolled.set_max_content_height(max_height)
-        scrolled.set_min_content_width(340)
-        scrolled.set_child(body)
-        scrolled.add_css_class("hdr-scroll")
-        self.root.append(scrolled)
+        switcher = gtk.StackSwitcher()
+        switcher.set_stack(self.stack)
+        switcher.set_halign(gtk.Align.CENTER)
+        switcher.add_css_class("hdr-tabs")
+        self.root.append(switcher)
+        self.root.append(self.stack)
 
     def header_button(self, icon, tooltip, callback):
         """A square icon button of the header."""
