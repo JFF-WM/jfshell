@@ -61,8 +61,15 @@ def get_plugin_class():
             self.grid.set_margin_bottom(self.layout_margin_bottom)
             self.grid.set_margin_start(self.layout_margin_start)
             self.grid.set_margin_end(self.layout_margin_end)
+            self.grid.set_halign(self.gtk.Align.CENTER)
+            self.grid.set_valign(self.gtk.Align.CENTER)
+
             self.calendar = self.gtk.Calendar()
             self.calendar.add_css_class("calendar-widget")
+            self.calendar.set_halign(self.gtk.Align.CENTER)
+            self.calendar.set_valign(self.gtk.Align.CENTER)
+            self.calendar.set_size_request(340, -1)
+
             self.grid.attach(self.calendar, 0, 0, 1, 1)
             self.setup_sidebar()
             self.add_page(
@@ -179,7 +186,9 @@ def get_plugin_class():
             """Switch the stack to a page and run the hide and show hooks."""
             if page_id == self.current_page or page_id not in self.pages:
                 return
-            visible = bool(self.popover_calendar and self.popover_calendar.get_visible())
+            visible = bool(
+                self.popover_calendar and self.popover_calendar.get_visible()
+            )
             if visible:
                 self.run_page_hook(self.current_page, "on_hide")
             self.current_page = page_id
