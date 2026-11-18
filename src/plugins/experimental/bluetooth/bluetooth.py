@@ -1,24 +1,17 @@
-def get_plugin_metadata(panel):
+def get_plugin_metadata(_):
     about = (
         "A plugin that provides a dashboard for managing Bluetooth devices.",
         "It displays a list of paired devices, indicates their connection status",
         "and allows the user to connect or disconnect them with a single click.",
+        "Shown as a page of the clock popover, with its own icon in the sidebar.",
     )
 
-    id = "org.jfshell.plugin.bluetooth"
-    default_container = "right-panel-center"
-    container, id = panel.config_handler.get_plugin_container(default_container, id)
-    hidden = panel.config_handler.get_root_setting([id, "hide_in_systray"], True)
-
     return {
-        "id": id,
+        "id": "org.jfshell.plugin.bluetooth",
         "name": "Bluetooth Manager",
         "version": "1.0.0",
         "enabled": True,
-        "index": 6,
-        "hidden": hidden,
-        "container": container,
-        "deps": ["css_generator"],
+        "deps": ["css_generator", "calendar"],
         "description": about,
     }
 
@@ -30,17 +23,18 @@ def get_plugin_class():
     from dbus_fast.aio import MessageBus
     from src.plugins.core._base import BasePlugin
 
+    PAGE_ID = "bluetooth"
+
     class Bluetooth(BasePlugin):
         def __init__(self, panel_instance):
             super().__init__(panel_instance)
 
         def on_start(self):
             """Hook called by BasePlugin after successful initialization."""
-            self.popover_dashboard = None
+            self.calendar = None
+            self.page_root = None
+            self.page_visible = False
             self.bluetooth_buttons = {}
-            self.bluetooth_button_popover = self.gtk.Button()
-            self.add_cursor_effect(self.bluetooth_button_popover)
-            self.main_widget = (self.bluetooth_button_popover, "append")
             self.main_icon = self.get_plugin_setting(
                 "main_icon", "bluetooth-active-symbolic"
             )
@@ -59,11 +53,54 @@ def get_plugin_class():
             )
             self.bus = None
             self._bus_lock = self.asyncio.Lock()
-            self.bluetooth_button_popover.connect(
-                "clicked", self.open_popover_dashboard
-            )
+            self.init_page()
             self.run_in_async_task(self._init_dbus_and_auto_connect())
             self.plugins["css_generator"].install_css("bluetooth.css")
+
+        def init_page(self) -> None:
+            """Build the page and add it to the clock popover's sidebar."""
+            if "calendar" not in self.plugins:
+                self.logger.error(
+                    "Calendar plugin is not loaded. Cannot add Bluetooth page."
+                )
+                return
+            self.calendar = self.plugins["calendar"]
+            self.page_root = self.gtk.Box.new(self.gtk.Orientation.VERTICAL, 10)
+            for side in ["top", "bottom", "start", "end"]:
+                getattr(self.page_root, f"set_margin_{side}")(10)
+            actual_icon = self.gtk_helper.icon_exist(
+                self.main_icon, self.fallback_main_icons
+            )
+            self.calendar.add_page(
+                PAGE_ID,
+                [actual_icon, "bluetooth-active-symbolic"],
+                "Bluetooth",
+                self.page_root,
+                on_show=self.on_page_show,
+                on_hide=self.on_page_hide,
+            )
+
+        def on_page_show(self) -> None:
+            """The page became visible: show a loading state and fetch the devices."""
+            self.page_visible = True
+            self._set_page_children([self.gtk.Label(label="Loading...")])
+            self.run_in_async_task(self._fetch_and_update_bluetooth_info())
+
+        def on_page_hide(self) -> None:
+            """The page is no longer visible."""
+            self.page_visible = False
+
+        def on_disable(self) -> None:
+            """Take the page out of the clock popover."""
+            if self.calendar:
+                self.calendar.remove_page(PAGE_ID)
+
+        def _set_page_children(self, children) -> None:
+            """Replace everything in the page with the given widgets."""
+            while child := self.page_root.get_first_child():
+                self.page_root.remove(child)
+            for widget in children:
+                self.page_root.append(widget)
 
         async def _ensure_bus(self):
             async with self._bus_lock:
@@ -194,29 +231,6 @@ def get_plugin_class():
             except Exception as e:
                 self.logger.exception(f"Failed to set default sink: {e}")
 
-        def open_popover_dashboard(self, *_):
-            if self.popover_dashboard and self.popover_dashboard.is_visible():
-                self.popover_dashboard.popdown()
-            elif self.popover_dashboard and not self.popover_dashboard.is_visible():
-                self.popover_dashboard.popup()
-            else:
-                self.create_popover_with_loading_state()
-
-        def create_popover_with_loading_state(self):
-            self.popover_dashboard = self.create_popover(
-                parent_widget=self.bluetooth_button_popover,
-                closed_handler=self.popover_is_closed,
-                css_class="bluetooth-dashboard-popover",
-            )
-            box = self.gtk.Box.new(self.gtk.Orientation.VERTICAL, 10)
-            for side in ["top", "bottom", "start", "end"]:
-                getattr(box, f"set_margin_{side}")(10)
-
-            box.append(self.gtk.Label(label="Loading..."))
-            self.popover_dashboard.set_child(box)
-            self.popover_dashboard.popup()
-            self.run_in_async_task(self._fetch_and_update_bluetooth_info())
-
         async def _fetch_and_update_bluetooth_info(self):
             devices_list = await self._get_devices()
             device_details = []
@@ -227,15 +241,15 @@ def get_plugin_class():
             self.schedule_in_gtk_thread(self._update_popover_buttons, device_details)
 
         def _update_popover_buttons(self, device_details):
-            if not self.popover_dashboard:
+            if not self.page_visible:
                 return False
-            popover_box = self.popover_dashboard.get_child()
-            while child := popover_box.get_first_child():
-                popover_box.remove(child)
+            self._set_page_children([])
 
             self.bluetooth_buttons.clear()
             if not device_details:
-                popover_box.append(self.gtk.Label(label="No Bluetooth devices found."))
+                self.page_root.append(
+                    self.gtk.Label(label="No Bluetooth devices found.")
+                )
             else:
                 for device in device_details:
                     btn = self.gtk.Box.new(self.gtk.Orientation.HORIZONTAL, 6)
@@ -269,7 +283,7 @@ def get_plugin_class():
                         btn.add_css_class("bluetooth-dashboard-buttons-connected")
 
                     self.bluetooth_buttons[mac] = btn
-                    popover_box.append(btn)
+                    self.page_root.append(btn)
             return False
 
         async def _connect_device_and_set_sink(self, device_id, device_info):
@@ -307,7 +321,7 @@ def get_plugin_class():
                 self.notifier.notify_send("Bluetooth", f"Connecting: {name}", icon)
                 await self._connect_device_and_set_sink(device_id, info)
 
-            if self.popover_dashboard and self.popover_dashboard.is_visible():
+            if self.page_visible:
                 await self._update_single_button_state(device_id)
 
         async def _update_single_button_state(self, device_id):
@@ -348,9 +362,6 @@ def get_plugin_class():
                 await proxy.get_interface("org.bluez.Device1").call_connect()
             except Exception as e:
                 self.logger.error(f"D-Bus Connect failed: {e}")
-
-        def popover_is_closed(self, *_):
-            self.popover_dashboard = None
 
         def code_explanation(self):
             """

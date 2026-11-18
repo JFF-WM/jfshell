@@ -11,15 +11,14 @@ def get_plugin_metadata(_):
     about = """
     Comprehensive system and application resource monitor.
     Features themed section-based layout with CPU, GPU, RAM, and Storage.
+    Shown as a page of the clock popover, with its own icon in the sidebar.
     """
     return {
         "id": "org.jfshell.plugin.system_monitor",
         "name": "System Monitor",
-        "version": "3.5.5",
+        "version": "3.6.0",
         "enabled": True,
-        "index": 9,
-        "container": "top-panel-systray",
-        "deps": ["gestures_setup", "css_generator"],
+        "deps": ["gestures_setup", "css_generator", "calendar"],
         "description": about,
     }
 
@@ -40,6 +39,8 @@ def get_plugin_class():
     from gi.repository import GObject, Gtk, Gio
     from ._system_monitor_helper import SystemMonitorHelpers
     from src.plugins.core._base import BasePlugin
+
+    PAGE_ID = "system_monitor"
 
     class ProperMetricItem(GObject.Object):
         """
@@ -115,7 +116,9 @@ def get_plugin_class():
             self.panel = panel_instance
 
         def on_start(self):
-            self.popover_system = None
+            self.content = None
+            self.calendar = None
+            self.page_visible = False
             self.update_timeout_id = None
             self.helper = SystemMonitorHelpers(self.panel)
             self.list_stores = {}
@@ -148,24 +151,60 @@ def get_plugin_class():
                 "A prioritized list of fallback icons to use if the main icon is not found.",
             )
 
-            self.create_menu_popover_system()
+            self.max_height = int(
+                self.get_plugin_setting_add_hint(
+                    ["max_height"],
+                    420,
+                    "Height in pixels the system monitor page grows to before it scrolls.",
+                )
+            )
+            if "calendar" not in self.plugins:
+                self.logger.error(
+                    "Calendar plugin is not loaded. Cannot add the system monitor page."
+                )
+                return
+            self.calendar = self.plugins["calendar"]
+            self.create_page()
             self.plugins["css_generator"].install_css("system-monitor.css")
 
-        def create_menu_popover_system(self):
+        def create_page(self):
             """
-            Initializes the tray button and icon.
+            Builds the content and adds it to the clock popover with its own sidebar icon.
             """
-            self.menubutton_system = Gtk.Button()
-            self.menubutton_system.add_css_class("system-monitor-menubutton")
-
             actual_icon = self.gtk_helper.icon_exist(
                 self.main_icon, self.fallback_main_icons
             )
-            self.menubutton_system.set_child(Gtk.Image.new_from_icon_name(actual_icon))
+            self.build_content()
+            self.calendar.add_page(
+                PAGE_ID,
+                [actual_icon, "utilities-system-monitor-symbolic"],
+                "System monitor",
+                self.content,
+                on_show=self.on_page_show,
+                on_hide=self.on_page_hide,
+            )
 
-            self.menubutton_system.connect("clicked", self.open_popover_system)
-            self.gtk_helper.add_cursor_effect(self.menubutton_system)
-            self.main_widget = (self.menubutton_system, "append")
+        def on_page_show(self):
+            """
+            The page became visible: start polling.
+            """
+            self.page_visible = True
+            self.start_system_updates()
+
+        def on_page_hide(self):
+            """
+            The page is no longer visible: stop polling.
+            """
+            self.page_visible = False
+            self.stop_system_updates()
+
+        def on_disable(self):
+            """
+            Stops polling and takes the page out of the clock popover.
+            """
+            self.stop_system_updates()
+            if self.calendar:
+                self.calendar.remove_page(PAGE_ID)
 
         def _set_margins(self, widget: Gtk.Widget, value: int):
             """
@@ -182,12 +221,18 @@ def get_plugin_class():
             """
             # Never stack timers if the popover is toggled quickly.
             self.stop_system_updates()
-            self._first_tick_id = self.glib.timeout_add(
-                1000, self.fetch_and_update_system_data
-            )
+            self._first_tick_id = self.glib.timeout_add(1000, self.first_tick)
             self.update_timeout_id = self.glib.timeout_add_seconds(
                 self.helper.update_interval, self.fetch_and_update_system_data
             )
+
+        def first_tick(self):
+            """
+            One early reading, the regular timer takes over after it.
+            """
+            self._first_tick_id = None
+            self.fetch_and_update_system_data()
+            return False
 
         def stop_system_updates(self):
             """
@@ -214,7 +259,7 @@ def get_plugin_class():
             """
             Updates the specific section store and tracks the key for pruning.
             """
-            if self.popover_system is None:
+            if self.content is None:
                 return
             key = f"{section}:{name}"
             if is_visible:
@@ -384,28 +429,13 @@ def get_plugin_class():
             for full_key, item in self.metric_items.items():
                 if full_key not in self.updated_keys:
                     item.visible = False
-            return self.popover_system and self.popover_system.is_visible()
+            return self.page_visible
 
-        def open_popover_system(self, *_):
+        def build_content(self):
             """
-            Toggles popover visibility and starts updates.
+            Builds section-based layout with a default-hidden Storage expander,
+            in a scrolled window that grows to max_height.
             """
-            if self.popover_system and self.popover_system.is_visible():
-                self.popover_system.popdown()
-            else:
-                if not self.popover_system:
-                    self.create_popover_system()
-                self.popover_system.popup()
-                self.start_system_updates()
-
-        def create_popover_system(self):
-            """
-            Builds section-based layout with a default-hidden Storage expander.
-            """
-            self.popover_system = Gtk.Popover.new()
-            self.popover_system.add_css_class("system-monitor-popover")
-            self.popover_system.set_has_arrow(False)
-            self.popover_system.connect("closed", lambda *_: self.stop_system_updates())
             root_vbox = Gtk.Box.new(Gtk.Orientation.VERTICAL, spacing=15)
             root_vbox.add_css_class("system-monitor-vbox")
             self._set_margins(root_vbox, 15)
@@ -422,8 +452,13 @@ def get_plugin_class():
             storage_vbox.append(lv)
             storage_exp.set_child(storage_vbox)
             root_vbox.append(storage_exp)
-            self.popover_system.set_child(root_vbox)
-            self.popover_system.set_parent(self.menubutton_system)
+            self.content = Gtk.ScrolledWindow()
+            self.content.add_css_class("system-monitor-popover")
+            self.content.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            self.content.set_propagate_natural_height(True)
+            self.content.set_max_content_height(self.max_height)
+            self.content.set_min_content_width(340)
+            self.content.set_child(root_vbox)
 
         def _build_section(self, name, icon, container):
             """

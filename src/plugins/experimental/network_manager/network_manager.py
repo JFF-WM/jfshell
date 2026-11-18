@@ -1,15 +1,14 @@
 def get_plugin_metadata(_):
     about = (
-        "A plugin that monitors and displays system network status (wired and Wi-Fi)",
+        "A plugin that monitors and displays system network status (wired and Wi-Fi). "
+        "Shown as a page of the clock popover, with its own icon in the sidebar.",
     )
     return {
         "id": "org.jfshell.plugin.network_manager",
         "name": "Network Manager",
         "version": "1.0.0",
         "enabled": True,
-        "index": 10,
-        "container": "right-panel-center",
-        "deps": ["css_generator"],
+        "deps": ["css_generator", "calendar"],
         "description": about,
     }
 
@@ -25,6 +24,7 @@ def get_plugin_class():
     ICON_WIFI_GOOD = "network-wireless-signal-good-symbolic"
     ICON_WIFI_OK = "network-wireless-signal-ok-symbolic"
     ICON_WIFI_WEAK = "network-wireless-signal-weak-symbolic"
+    PAGE_ID = "network"
 
     class NetworkManager(BasePlugin):
         def __init__(self, panel_instance):
@@ -32,9 +32,16 @@ def get_plugin_class():
             self.panel = panel_instance
 
         def on_start(self):
+            self.calendar = None
+            if "calendar" not in self.plugins:
+                self.logger.error(
+                    "Calendar plugin is not loaded. Cannot add Network page."
+                )
+                return
+            self.calendar = self.plugins["calendar"]
             self.cli_backend = NetworkCLI(self.panel)
-            self.button = self.gtk.MenuButton()
-            self.popover = None
+            self.page_root = None
+            self.page_visible = False
             self.icon_wired_connected = self.gtk_helper.icon_exist(
                 "gnome-dev-network-symbolic",
                 [
@@ -108,21 +115,38 @@ def get_plugin_class():
 
         def init_ui(self):
             """
-            Initialize button and popover UI.
-            Refactored to use self.create_popover helper.
+            Initialize the page and add it to the clock popover's sidebar.
+            The page content is rebuilt each time the page becomes visible.
             """
-            self.popover = self.create_popover(
-                parent_widget=self.button,
-                css_class="network-manager-popover",
-                has_arrow=False,
-                closed_handler=None,
-                visible_handler=self.on_popover_visibility_changed,
+            self.page_root = self.gtk.Box(orientation=self.gtk.Orientation.VERTICAL)
+            self.calendar.add_page(
+                PAGE_ID,
+                [self.icon, "network-wireless-symbolic", "network-wired-symbolic"],
+                "Network",
+                self.page_root,
+                on_show=self.on_page_show,
+                on_hide=self.on_page_hide,
             )
-            self.glib.idle_add(self.button.set_popover, self.popover)
             self.global_loop.create_task(self.update_icon_async())
-            self.glib.idle_add(self.button.set_icon_name, self.icon)
-            self.gtk_helper.add_cursor_effect(self.button)
-            self.main_widget = (self.button, "append")
+
+        def on_disable(self):
+            """Take the page out of the clock popover."""
+            if self.calendar:
+                self.calendar.remove_page(PAGE_ID)
+
+        def _update_sidebar_icon(self) -> bool:
+            """Show the current connection icon on the Network sidebar button."""
+            page = self.calendar.pages.get(PAGE_ID) if self.calendar else None
+            if page:
+                page["button"].set_child(self.gtk.Image.new_from_icon_name(self.icon))
+            return False
+
+        def _set_page_content(self, content) -> bool:
+            """Replace the page's content with a freshly built one."""
+            while child := self.page_root.get_first_child():
+                self.page_root.remove(child)
+            self.page_root.append(content)
+            return False
 
         def _is_wireless_interface(self, interface: str) -> bool:
             """Check if an interface name indicates a wireless device."""
@@ -159,7 +183,7 @@ def get_plugin_class():
                     if is_connected
                     else self.icon_wired_disconnected
                 )
-            self.glib.idle_add(self.button.set_icon_name, self.icon)
+            self.glib.idle_add(self._update_sidebar_icon)
 
         async def periodic_check_async(self):
             """Periodically check network status using self.asyncio."""
@@ -167,15 +191,19 @@ def get_plugin_class():
                 await self.update_icon_async()
                 await self.asyncio.sleep(30)
 
-        def on_popover_visibility_changed(self, popover, param):
-            """Update content when popover becomes visible."""
-            if self.popover.get_property("visible"):
-                self.global_loop.create_task(self.update_popover_content_async())
+        def on_page_show(self) -> None:
+            """Update content when the page becomes visible."""
+            self.page_visible = True
+            self.global_loop.create_task(self.update_popover_content_async())
+
+        def on_page_hide(self) -> None:
+            """The page is no longer visible."""
+            self.page_visible = False
 
         async def update_popover_content_async(self):
             """Update popover content without changing the icon."""
             content = await self.create_scrollable_grid_content_async()
-            self.glib.idle_add(self.popover.set_child, content)
+            self.glib.idle_add(self._set_page_content, content)
 
         async def is_internet_connected_async(self) -> bool:
             """
@@ -484,7 +512,7 @@ def get_plugin_class():
             """Update icon and refresh popover content."""
             await self.update_icon_async()
             content = await self.create_scrollable_grid_content_async()
-            self.glib.idle_add(self.popover.set_child, content)
+            self.glib.idle_add(self._set_page_content, content)
 
         def on_connect_button_clicked(self, button, ssid):
             """UI event handler to connect to a specified Wi-Fi network."""
@@ -511,7 +539,7 @@ def get_plugin_class():
             if self.scanning_in_progress:
                 return
             self.scanning_in_progress = True
-            if self.popover.get_property("visible") and self.scan_status_label:
+            if self.page_visible and self.scan_status_label:
                 self.glib.idle_add(self.scan_status_label.set_label, "Scanning...")
             return_code, raw_output = await self.cli_backend.scan_networks_async()
             self.scanning_in_progress = False
@@ -555,7 +583,7 @@ def get_plugin_class():
                         "bssid": bssid,
                     }
                 )
-            if self.popover.get_property("visible"):
+            if self.page_visible:
                 self.global_loop.create_task(self.update_popover_async())
 
         async def _apply_config_autoconnect_settings_async(self):
@@ -568,7 +596,7 @@ def get_plugin_class():
         async def _connect_to_network_async(self, ssid: str):
             """UI-side wrapper for the connection attempt."""
             self.logger.info(f"UI: Attempting connection to {ssid}")
-            self.glib.idle_add(self.popover.popdown)
+            self.glib.idle_add(self.calendar.popover_calendar.popdown)
             await self.cli_backend._connect_to_network_async(ssid)
             await self.update_icon_and_popover()
 

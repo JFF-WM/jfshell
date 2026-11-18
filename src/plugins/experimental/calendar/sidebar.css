@@ -1,0 +1,32 @@
+.clock-popover-root {
+  padding: 0;
+}
+
+.clock-sidebar {
+  margin: 10px 0 10px 10px;
+  padding: 8px 6px;
+  border-radius: var(--radius-s, 10px);
+  background-color: var(--color-bg-popover, rgba(255, 255, 255, 0.05));
+}
+
+.clock-sidebar-button {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: var(--radius-s, 8px);
+  background-color: transparent;
+  box-shadow: none;
+}
+
+.clock-sidebar-button:hover {
+  background-color: color-mix(in srgb, var(--theme-status-accent, #3daee9) 20%, transparent);
+}
+
+.clock-sidebar-button:checked {
+  background-color: var(--theme-status-accent, #3daee9);
+  color: #ffffff;
+}
+
+.clock-sidebar-button:checked image {
+  color: #ffffff;
+}

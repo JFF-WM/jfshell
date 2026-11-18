@@ -121,7 +121,7 @@ def get_plugin_class():
             self.weather_grid.add_css_class("weather-grid")  # pyright: ignore
             self.weather_grid.set_column_spacing(12)  # pyright: ignore
             self.weather_grid.set_row_spacing(6)  # pyright: ignore
-            self.weather_grid.set_margin_start(12)  # pyright: ignore
+            self.weather_grid.set_margin_start(0)  # pyright: ignore
             self.weather_grid.set_valign(self.gtk.Align.START)  # pyright: ignore
             self.weather_title_label = self.gtk.Label(label="🌍 Loading Weather...")  # pyright: ignore
             self.weather_title_label.add_css_class("weather-title-label")  # pyright: ignore
@@ -159,9 +159,12 @@ def get_plugin_class():
 
             def update_ui():
                 """Attaches the grid to the calendar popover."""
-                grid = calendar_plugin.popover_calendar.get_child()
+                grid = (
+                    getattr(calendar_plugin, "grid", None)
+                    or calendar_plugin.popover_calendar.get_child()
+                )
                 if grid:
-                    grid.attach(cast(self.gtk.Grid, self.weather_grid), 1, 0, 1, 1)  # pyright: ignore
+                    grid.attach(cast(self.gtk.Grid, self.weather_grid), 0, 1, 1, 1)  # pyright: ignore
                     cast(self.gtk.Grid, self.weather_grid).show()  # pyright: ignore
                     grid.show()
 

@@ -305,9 +305,10 @@ class ControlCenterHelpers:
                 f"Error applying JFShell theme: {e}", "dialog-error-symbolic"
             )
         try:
-            config_dict = self.parent.config.setdefault(MAIN_CONFIG_KEY, {})
-            config_dict.setdefault(NESTED_CONFIG_KEY, {})[DEFAULT_KEY] = selected_theme
-            self.parent.config_handler.save_config()
+            self.parent.config_handler.set_root_setting(
+                [MAIN_CONFIG_KEY, NESTED_CONFIG_KEY, DEFAULT_KEY], selected_theme
+            )
+            self.parent.config = self.parent.config_handler.config_data
             if hasattr(self.parent._panel_instance, "apply_theme"):
                 self.parent._panel_instance.apply_theme(selected_theme)
             if "css_generator" in self.parent.plugins:

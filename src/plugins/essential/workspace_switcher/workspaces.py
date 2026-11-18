@@ -19,7 +19,7 @@ def get_plugin_class():
     from src.plugins.core._base import BasePlugin
 
     class WorkspaceSwitcher(BasePlugin):
-        """Workspace buttons for jff, laid out in the top panel."""
+        """Workspace buttons for jff, laid out in the panel."""
 
         def on_start(self) -> None:
             self._buttons = {}
@@ -47,8 +47,9 @@ def get_plugin_class():
                 "Use a dot icon instead of the workspace number.",
             )
 
+            # Vertical panel: buttons stacked vertically.
             self.container = self.gtk.Box(
-                orientation=self.gtk.Orientation.HORIZONTAL, spacing=2
+                orientation=self.gtk.Orientation.VERTICAL, spacing=2
             )
             self.container.add_css_class(self.css_class)
             self.container.set_valign(self.gtk.Align.CENTER)
@@ -80,11 +81,9 @@ def get_plugin_class():
         def _on_event(self, msg: dict) -> None:
             ev = msg.get("event")
             if ev == "view-focused":
-                # Only the focused workspace button changes -> cheap update.
                 self._update_active_state()
                 return
             if ev == "overview-changed":
-                # The overview does not change workspaces, ignore.
                 return
             self._schedule_refresh()
 
@@ -144,7 +143,6 @@ def get_plugin_class():
             populated = self._workspace_ids_with_views()
 
             desired_ids = [int(w.get("id")) for w in workspaces]
-            # Remove buttons for workspaces that no longer exist.
             for ws_id in list(self._buttons.keys()):
                 if ws_id not in desired_ids:
                     button = self._buttons.pop(ws_id)
@@ -152,7 +150,6 @@ def get_plugin_class():
                     if parent is not None:
                         parent.remove(button)
 
-            # Create / update buttons in order.
             for index, workspace in enumerate(workspaces):
                 ws_id = int(workspace.get("id"))
                 button = self._buttons.get(ws_id)
@@ -232,7 +229,6 @@ def get_plugin_class():
                     f"Workspace Switcher: focus failed for {workspace_id}: {e}"
                 )
                 return
-            # Optimistic update, jff will also emit workspace-changed.
             self._update_active_state()
 
         # ------------------------------------------------------------------ lifecycle

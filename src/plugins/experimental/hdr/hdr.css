@@ -1,0 +1,77 @@
+.hdr-page {
+  min-width: 340px;
+}
+
+.hdr-title {
+  font-weight: 700;
+  font-size: 1.05em;
+  color: var(--theme-status-accent, #3daee9);
+}
+
+.hdr-header-button {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: var(--radius-s, 8px);
+  background-color: var(--color-bg-popover, rgba(255, 255, 255, 0.06));
+  box-shadow: none;
+}
+
+.hdr-header-button:hover {
+  background-color: color-mix(in srgb, var(--theme-status-accent, #3daee9) 25%, transparent);
+}
+
+.hdr-monitor-pill {
+  padding: 2px 12px;
+  border-radius: 999px;
+  min-height: 26px;
+  background-color: var(--color-bg-popover, rgba(255, 255, 255, 0.06));
+  box-shadow: none;
+}
+
+.hdr-monitor-pill:checked {
+  background-color: var(--theme-status-accent, #3daee9);
+  color: #ffffff;
+}
+
+.hdr-card {
+  padding: 10px 12px;
+  border-radius: var(--radius-s, 8px);
+  background-color: var(--color-bg-popover, rgba(255, 255, 255, 0.06));
+}
+
+.hdr-card-title {
+  font-weight: 700;
+}
+
+.hdr-status {
+  font-size: 0.9em;
+  opacity: 0.75;
+}
+
+.hdr-status.hdr-error {
+  color: var(--theme-status-error, #e5534b);
+  opacity: 1;
+}
+
+.hdr-section {
+  margin-top: 4px;
+  font-weight: 700;
+  font-size: 0.9em;
+  opacity: 0.7;
+}
+
+.hdr-row-value {
+  font-size: 0.9em;
+  opacity: 0.75;
+}
+
+.hdr-scale highlight {
+  background-color: var(--theme-status-accent, #3daee9);
+}
+
+.hdr-info {
+  margin-top: 4px;
+  font-size: 0.85em;
+  opacity: 0.65;
+}
