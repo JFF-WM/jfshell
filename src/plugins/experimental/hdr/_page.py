@@ -29,22 +29,7 @@ GAMUT_MAPS = (("compress", "Compress"), ("clip", "Clip"))
 
 
 class HdrPage:
-    """Widgets of the HDR page.
-
-    Args:
-        gtk: The Gtk module.
-        glib: The GLib module.
-        on_enabled: Called with a bool when the HDR switch is flipped.
-        on_change: Called with ``(key, values)`` once a slider or a dropdown
-            settles. ``key`` is ``sdr_white``, ``peak``, ``contrast``,
-            ``black-level``, ``saturation``, ``white-balance``, ``tone-map`` or
-            ``gamut-map``, ``values`` a tuple.
-        on_reset: Called when the reset button is pressed.
-        on_copy: Called when the copy button is pressed.
-        on_monitor: Called with the monitor name when another one is picked.
-        peak_max: Upper end of the peak slider in nits.
-        max_height: Height the settings list grows to before it scrolls.
-    """
+    """Widgets of the HDR page."""
 
     def __init__(
         self,
@@ -55,6 +40,7 @@ class HdrPage:
         on_reset,
         on_copy,
         on_monitor,
+        on_restore_toggled=None,
         peak_max=4000,
         max_height=420,
     ):
@@ -65,6 +51,7 @@ class HdrPage:
         self.on_reset = on_reset
         self.on_copy = on_copy
         self.on_monitor = on_monitor
+        self.on_restore_toggled = on_restore_toggled
         self.updating = False
         self.rows = {}
         self.timers = {}
@@ -91,11 +78,29 @@ class HdrPage:
         title.set_halign(gtk.Align.START)
         title.set_hexpand(True)
         header.append(title)
-        header.append(self.header_button("edit-undo-symbolic", "Reset to config", self.on_reset))
         header.append(
-            self.header_button("edit-copy-symbolic", "Copy settings as config", self.on_copy)
+            self.header_button("edit-undo-symbolic", "Reset to config", self.on_reset)
+        )
+        header.append(
+            self.header_button(
+                "edit-copy-symbolic", "Copy settings as config", self.on_copy
+            )
         )
         self.root.append(header)
+
+        # Restore-on-start switch row
+        restore_row = gtk.Box(orientation=gtk.Orientation.HORIZONTAL, spacing=6)
+        restore_row.add_css_class("hdr-restore-row")
+        restore_label = gtk.Label(label="Restore settings on start")
+        restore_label.add_css_class("hdr-restore-label")
+        restore_label.set_halign(gtk.Align.START)
+        restore_label.set_hexpand(True)
+        restore_row.append(restore_label)
+        self.restore_switch = gtk.Switch()
+        self.restore_switch.set_valign(gtk.Align.CENTER)
+        # Do NOT connect until after the initial set_restore_on_start call.
+        restore_row.append(self.restore_switch)
+        self.root.append(restore_row)
 
         self.monitor_row = gtk.Box(orientation=gtk.Orientation.HORIZONTAL, spacing=6)
         self.monitor_row.add_css_class("hdr-monitors")
@@ -151,8 +156,96 @@ class HdrPage:
         self.root.append(switcher)
         self.root.append(self.stack)
 
+        # Connect the restore switch now that the tree exists and the
+        # initial set_restore_on_start() has been applied by the plugin.
+        self.restore_switch.connect("notify::active", self.on_restore_switch)
+
+    # ---- Settings API ----
+
+    def get_settings(self):
+        """Return the current settings as a dict, for the plugin to persist."""
+        return {
+            "enabled": self.switch.get_active(),
+            "sdr_white": self.rows["sdr_white"]["scale"].get_value(),
+            "peak": self.rows["peak"]["scale"].get_value(),
+            "contrast": self.rows["contrast"]["scale"].get_value(),
+            "black_level": self.rows["black_level"]["scale"].get_value(),
+            "saturation": self.rows["saturation"]["scale"].get_value(),
+            "white_balance": (
+                self.rows["wb_r"]["scale"].get_value(),
+                self.rows["wb_g"]["scale"].get_value(),
+                self.rows["wb_b"]["scale"].get_value(),
+            ),
+            "tone_map": self._dropdown_value("tone-map"),
+            "gamut_map": self._dropdown_value("gamut-map"),
+        }
+
+    def set_settings(self, settings):
+        """Restore settings previously returned by get_settings()."""
+        if not settings:
+            return
+        self.updating = True
+        try:
+            if "enabled" in settings and isinstance(settings["enabled"], bool):
+                self.switch.set_active(settings["enabled"])
+            for key in (
+                "sdr_white",
+                "peak",
+                "contrast",
+                "black_level",
+                "saturation",
+                "wb_r",
+                "wb_g",
+                "wb_b",
+            ):
+                if key in settings:
+                    self._apply_slider(key, settings[key])
+            wb = settings.get("white_balance")
+            if wb and len(wb) == 3:
+                self._apply_slider("wb_r", wb[0])
+                self._apply_slider("wb_g", wb[1])
+                self._apply_slider("wb_b", wb[2])
+            for key in ("tone-map", "gamut-map"):
+                value = settings.get(key)
+                if value is None:
+                    continue
+                dropdown, options = self.dropdowns[key]
+                if value in options:
+                    dropdown.set_selected(options.index(value))
+            self.body.set_sensitive(self.switch.get_active())
+        finally:
+            self.updating = False
+
+    def set_restore_on_start(self, value):
+        """Set the restore switch without firing its callback."""
+        self.updating = True
+        try:
+            self.restore_switch.set_active(bool(value))
+        finally:
+            self.updating = False
+
+    def _apply_slider(self, key, value):
+        row = self.rows.get(key)
+        if row is None:
+            return
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return
+        value = min(max(value, row["low"]), row["high"])
+        row["scale"].set_value(value)
+        row["value"].set_label(self.format_value(key, value))
+
+    def _dropdown_value(self, key):
+        dropdown, options = self.dropdowns[key]
+        index = dropdown.get_selected()
+        if 0 <= index < len(options):
+            return options[index]
+        return options[0]
+
+    # ---- Widgets ----
+
     def header_button(self, icon, tooltip, callback):
-        """A square icon button of the header."""
         button = self.gtk.Button.new_from_icon_name(icon)
         button.add_css_class("hdr-header-button")
         button.set_tooltip_text(tooltip)
@@ -160,7 +253,6 @@ class HdrPage:
         return button
 
     def slider_row(self, key, peak_max):
-        """A name and value line over a slider, for the setting with that key."""
         gtk = self.gtk
         spec = next(s for s in SLIDERS if s[0] == key)
         _key, name, low, high, step, unit, digits = spec
@@ -196,7 +288,6 @@ class HdrPage:
         return box
 
     def choice_row(self, key, name, choices):
-        """A name and a dropdown for a setting with a few fixed values."""
         gtk = self.gtk
         box = gtk.Box(orientation=gtk.Orientation.HORIZONTAL, spacing=6)
         box.add_css_class("hdr-row")
@@ -213,18 +304,24 @@ class HdrPage:
         return box
 
     def format_value(self, key, value):
-        """Text of a slider value."""
         row = self.rows[key]
         text = f"{value:.{row['digits']}f}"
         return f"{text} {row['unit']}" if row["unit"] else text
 
+    # ---- Callbacks ----
+
+    def on_restore_switch(self, switch, _param):
+        """The restore-on-start switch was flipped by the user."""
+        if self.updating:
+            return
+        if self.on_restore_toggled:
+            self.on_restore_toggled(switch.get_active())
+
     def on_switch(self, switch, _param):
-        """The HDR switch was flipped by the user."""
         if not self.updating:
             self.on_enabled(switch.get_active())
 
     def on_scale(self, scale, key):
-        """A slider moved: show the value now, send it once it settles."""
         row = self.rows[key]
         row["value"].set_label(self.format_value(key, scale.get_value()))
         if self.updating:
@@ -235,10 +332,11 @@ class HdrPage:
         self.timers[key] = self.glib.timeout_add(SLIDER_DELAY_MS, self.fire, key)
 
     def fire(self, key):
-        """Send a slider's value, the three gains go together."""
         self.timers.pop(key, None)
         if key in ("wb_r", "wb_g", "wb_b"):
-            gains = tuple(self.rows[k]["scale"].get_value() for k in ("wb_r", "wb_g", "wb_b"))
+            gains = tuple(
+                self.rows[k]["scale"].get_value() for k in ("wb_r", "wb_g", "wb_b")
+            )
             self.on_change("white-balance", gains)
         else:
             value = self.rows[key]["scale"].get_value()
@@ -248,7 +346,6 @@ class HdrPage:
         return False
 
     def on_dropdown(self, dropdown, _param, key):
-        """A dropdown changed by the user."""
         if self.updating:
             return
         _widget, values = self.dropdowns[key]
@@ -257,13 +354,13 @@ class HdrPage:
             self.on_change(key, (values[index],))
 
     def cancel_timers(self):
-        """Drop slider values that were not sent yet."""
         for pending in self.timers.values():
             self.glib.source_remove(pending)
         self.timers.clear()
 
+    # ---- View state ----
+
     def set_monitors(self, names, selected):
-        """Show one button per monitor, only when there is a choice to make."""
         names = tuple(names)
         if names != self.pill_names:
             child = self.monitor_row.get_first_child()
@@ -293,12 +390,10 @@ class HdrPage:
             self.updating = False
 
     def on_pill(self, button, name):
-        """A monitor button became active."""
         if button.get_active() and not self.updating:
             self.on_monitor(name)
 
     def set_state(self, state, text):
-        """Show the state of the selected monitor, without sending anything."""
         self.updating = True
         try:
             self.switch.set_active(state.requested)
@@ -322,7 +417,10 @@ class HdrPage:
                 value = min(max(float(value), row["low"]), row["high"])
                 row["scale"].set_value(value)
                 row["value"].set_label(self.format_value(key, value))
-            for key, current in (("tone-map", state.tone_map), ("gamut-map", state.gamut_map)):
+            for key, current in (
+                ("tone-map", state.tone_map),
+                ("gamut-map", state.gamut_map),
+            ):
                 dropdown, options = self.dropdowns[key]
                 if current in options:
                     dropdown.set_selected(options.index(current))
@@ -331,10 +429,11 @@ class HdrPage:
             self.updating = False
 
     def info_text(self, state):
-        """Content light levels and direct scanout, when the compositor reports them."""
         lines = []
         if state.max_cll or state.max_fall:
-            lines.append(f"Window light: MaxCLL {state.max_cll or '-'} · MaxFALL {state.max_fall or '-'} nits")
+            lines.append(
+                f"Window light: MaxCLL {state.max_cll or '-'} · MaxFALL {state.max_fall or '-'} nits"
+            )
         if state.active:
             if state.scanout_active:
                 lines.append("Direct scanout: on")
@@ -343,17 +442,14 @@ class HdrPage:
         return "\n".join(lines)
 
     def set_error(self, message):
-        """Show a failure in the status line."""
         self.status.add_css_class("hdr-error")
         self.status.set_label(message)
 
     def set_note(self, message):
-        """Show a plain message in the status line."""
         self.status.remove_css_class("hdr-error")
         self.status.set_label(message)
 
     def set_unavailable(self, message):
-        """No monitor to control: show why and grey the page out."""
         self.updating = True
         try:
             self.switch.set_active(False)
@@ -364,5 +460,4 @@ class HdrPage:
         self.set_error(message)
 
     def enable_controls(self):
-        """Undo set_unavailable."""
         self.switch.set_sensitive(True)

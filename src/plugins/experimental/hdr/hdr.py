@@ -17,30 +17,19 @@ def get_plugin_metadata(_):
 
 
 def get_plugin_class():
-    """
-    The main plugin class entry point. ALL imports are deferred here
-    to comply with the JFShell loading architecture.
-    Returns:
-        type: The HdrPlugin class.
-    """
     from src.core.compositor.ipc import jff_msg
     from src.plugins.core._base import BasePlugin
     from ._client import HdrClient, describe
     from ._page import HdrPage
 
     PAGE_ID = "hdr"
+    SETTINGS_KEY = ["settings"]
+    RESTORE_KEY = ["restore_on_start"]
 
     class HdrPlugin(BasePlugin):
-        """
-        Plugin that adds an HDR control page to the calendar popover's sidebar.
-        """
+        """Plugin that adds an HDR control page to the calendar popover's sidebar."""
 
         def __init__(self, panel_instance):
-            """
-            Initialize the plugin.
-            Args:
-                panel_instance: The main panel instance provided by the framework.
-            """
             super().__init__(panel_instance)
 
         def on_start(self):
@@ -49,14 +38,13 @@ def get_plugin_class():
             self.last_state = None
             self.refresh_id = 0
             self.epoch = 0
-            self.applied_epoch = -1
             self.page = None
             self.calendar = None
+            self._pending_restore = {}
+            self._restore_done = False
             self.client = HdrClient(jff_msg)
-            self.add_hint(
-                ["Settings of the HDR page in the clock popover."],
-                None,
-            )
+
+            self.add_hint(["Settings of the HDR page in the clock popover."], None)
             icon = self.get_plugin_setting_add_hint(
                 ["icon"],
                 "video-display-symbolic",
@@ -77,9 +65,12 @@ def get_plugin_class():
                 2,
                 "How often the page re-reads the monitor while it is open, in seconds.",
             )
+            self.restore_on_start = bool(self.get_plugin_setting(RESTORE_KEY, True))
+
             if "calendar" not in self.plugins:
                 self.logger.error("Calendar plugin is not loaded. Cannot add HDR page.")
                 return
+
             self.calendar = self.plugins["calendar"]
             self.page = HdrPage(
                 self.gtk,
@@ -89,12 +80,29 @@ def get_plugin_class():
                 on_reset=self.on_reset,
                 on_copy=self.on_copy,
                 on_monitor=self.on_monitor,
+                on_restore_toggled=self.on_restore_toggled,
                 peak_max=min(max(int(peak_max), 100), 10000),
                 max_height=int(max_height),
             )
+
+            # Apply the persisted restore switch value BEFORE the switch is
+            # connected (done in _page.build), so no spurious callback fires.
+            self.page.set_restore_on_start(self.restore_on_start)
+
+            # Preload the last-known page values into the widgets (visual only).
+            saved = self.get_plugin_setting(SETTINGS_KEY, {}) or {}
+            if saved:
+                self.page.set_settings(saved)
+                if self.restore_on_start:
+                    self._pending_restore = dict(saved)
+
             self.calendar.add_page(
                 PAGE_ID,
-                [icon, "preferences-desktop-display-symbolic", "video-display-symbolic"],
+                [
+                    icon,
+                    "preferences-desktop-display-symbolic",
+                    "video-display-symbolic",
+                ],
                 "HDR",
                 self.page.root,
                 on_show=self.on_page_show,
@@ -102,8 +110,30 @@ def get_plugin_class():
             )
             self.plugins["css_generator"].install_css("hdr.css")
 
+            # Kick off a refresh now, so restore-to-jff runs on startup
+            # instead of only when the user opens the HDR tab.
+            if self._pending_restore:
+                self.refresh()
+
+        def _save_page_settings(self):
+            if self.page is None:
+                return
+            try:
+                self.set_plugin_setting(SETTINGS_KEY, self.page.get_settings())
+            except Exception as e:
+                self.logger.error(f"Failed to save HDR settings: {e}")
+
+        def on_restore_toggled(self, value):
+            """The user flipped the restore-on-start switch."""
+            self.restore_on_start = bool(value)
+            try:
+                self.set_plugin_setting(RESTORE_KEY, self.restore_on_start)
+            except Exception as e:
+                self.logger.error(f"Failed to save restore_on_start: {e}")
+            if not self.restore_on_start:
+                self._pending_restore = {}
+
         def on_disable(self):
-            """Stop polling and take the page out of the popover."""
             self.stop_polling()
             if self.page:
                 self.page.cancel_timers()
@@ -111,7 +141,6 @@ def get_plugin_class():
                 self.calendar.remove_page(PAGE_ID)
 
         def on_page_show(self):
-            """The page became visible: read the monitor now and keep reading it."""
             self.refresh()
             self.stop_polling()
             self.refresh_id = self.glib.timeout_add_seconds(
@@ -119,26 +148,21 @@ def get_plugin_class():
             )
 
         def on_page_hide(self):
-            """The page is no longer visible: stop reading the monitor."""
             self.stop_polling()
 
         def stop_polling(self):
-            """Remove the refresh timer."""
             if self.refresh_id:
                 self.glib.source_remove(self.refresh_id)
                 self.refresh_id = 0
 
         def on_tick(self):
-            """Timer callback of the refresh."""
             self.refresh()
             return True
 
         def refresh(self, error=None):
-            """Read the monitors in the background and show the result."""
             self.run_in_thread(self.fetch_state, self.monitor, self.epoch, error)
 
         def fetch_state(self, wanted, epoch, error):
-            """Background part of refresh: runs off the GTK thread."""
             try:
                 outputs = self.client.monitors()
                 names = [str(o.get("name", "")) for o in outputs]
@@ -153,7 +177,6 @@ def get_plugin_class():
             self.schedule_in_gtk_thread(self.apply_state, names, state, epoch, error)
 
         def apply_state(self, names, state, epoch, error):
-            """Show a monitor's state. A reading older than the last change is dropped."""
             if epoch != self.epoch or self.page.timers:
                 return
             self.monitor = state.name
@@ -164,21 +187,27 @@ def get_plugin_class():
             if error:
                 self.page.set_error(error)
 
+            # One-shot: after the first successful read, push saved values to
+            # jff, but only if the restore switch is on.
+            if self._pending_restore and not self._restore_done:
+                self._restore_done = True
+                pending = self._pending_restore
+                self._pending_restore = {}
+                if self.restore_on_start:
+                    self._reapply_saved(pending)
+
         def apply_failure(self, message, epoch):
-            """Reading failed: say why and grey the page out."""
             if epoch != self.epoch:
                 return
             self.page.set_unavailable(message)
 
         def run_command(self, action, *args):
-            """Send a change in the background, then read the monitor again."""
             if not self.monitor:
                 return
             self.epoch += 1
             self.run_in_thread(self.execute, action, args, self.epoch)
 
         def execute(self, action, args, epoch):
-            """Background part of run_command: runs off the GTK thread."""
             error = None
             try:
                 action(*args)
@@ -187,16 +216,68 @@ def get_plugin_class():
             self.schedule_in_gtk_thread(self.after_command, error, epoch)
 
         def after_command(self, error, epoch):
-            """A change was sent: read the monitor to show what it really does."""
             if epoch == self.epoch:
                 self.refresh(error)
 
+        def _reapply_saved(self, saved):
+            """Push saved settings to jff after a restart, when jff lost them."""
+            if not self.monitor:
+                return
+            try:
+                if saved.get("enabled") is True:
+                    self.run_command(self.client.set_enabled, self.monitor, True)
+                if "sdr_white" in saved:
+                    self.run_command(
+                        self.client.set_sdr_white,
+                        self.monitor,
+                        int(saved["sdr_white"]),
+                    )
+                if "peak" in saved:
+                    self.run_command(
+                        self.client.set_value,
+                        self.monitor,
+                        "peak",
+                        float(saved["peak"]),
+                    )
+                for key in ("contrast", "black_level", "saturation"):
+                    if key in saved:
+                        self.run_command(
+                            self.client.set_value,
+                            self.monitor,
+                            key,
+                            float(saved[key]),
+                        )
+                wb = saved.get("white_balance")
+                if wb and len(wb) == 3:
+                    self.run_command(
+                        self.client.set_value,
+                        self.monitor,
+                        "white-balance",
+                        *[float(v) for v in wb],
+                    )
+                if "tone_map" in saved:
+                    self.run_command(
+                        self.client.set_value,
+                        self.monitor,
+                        "tone-map",
+                        saved["tone_map"],
+                    )
+                if "gamut_map" in saved:
+                    self.run_command(
+                        self.client.set_value,
+                        self.monitor,
+                        "gamut-map",
+                        saved["gamut_map"],
+                    )
+            except Exception as e:
+                self.logger.error(f"Failed to reapply HDR settings: {e}")
+
         def on_enabled(self, enabled):
-            """The HDR switch was flipped."""
+            self._save_page_settings()
             self.run_command(self.client.set_enabled, self.monitor, bool(enabled))
 
         def on_change(self, key, values):
-            """A slider or dropdown settled on a value."""
+            self._save_page_settings()
             if key == "sdr_white":
                 self.run_command(self.client.set_sdr_white, self.monitor, values[0])
             elif key == "white-balance":
@@ -214,17 +295,14 @@ def get_plugin_class():
                 self.run_command(self.client.set_value, self.monitor, key, values[0])
 
         def on_reset(self):
-            """The reset button: back to what the config file says."""
             self.run_command(self.client.reset, self.monitor)
 
         def on_monitor(self, name):
-            """Another monitor was picked."""
             self.monitor = name
             self.epoch += 1
             self.refresh()
 
         def on_copy(self):
-            """Copy the lines that give the config file the settings in use."""
             state = self.last_state
             if state is None or not state.kdl:
                 self.page.set_note("Nothing differs from the config file.")
@@ -248,9 +326,10 @@ def get_plugin_class():
             jff every few seconds on a background thread, and every change
             (switch, slider, dropdown, reset) is one short request to jff's
             socket on a background thread followed by a fresh reading, so the
-            page always shows what the monitor really does. Changes last until
-            jff reloads its config, the copy button gives the lines that make
-            them permanent.
+            page always shows what the monitor really does. Each change is
+            also written to the plugin's config, and the "Restore settings on
+            start" switch in the page header decides whether those saved
+            values are pushed back to jff after a jfshell restart.
             """
             return self.code_explanation.__doc__
 
