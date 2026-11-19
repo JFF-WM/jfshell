@@ -94,8 +94,36 @@ def get_ui_class():
             self.p.toast_overlay = self.adw.ToastOverlay.new()
             self.p.toast_overlay.set_child(main_vbox)
             win.set_content(self.p.toast_overlay)
+            win.connect("map", self.sync_color_scheme)
 
             return win
+
+        def sync_color_scheme(self, win: Gtk.Widget) -> bool:
+            """Match libadwaita's light/dark palette to the active JFShell theme.
+
+            Adw widgets (HeaderBar, PreferencesGroup, ActionRow) take their colours
+            from libadwaita's palette, which follows the system colour scheme and
+            not the JFShell CSS theme. A dark theme on a light palette gives light
+            rows holding light text. The theme's text colour tells us which palette
+            fits: light text means a dark theme.
+            """
+            if win is None or win is not self.p.win:
+                return False
+            if not hasattr(win, "get_color"):
+                return False
+            rgba = win.get_color()
+            luminance = 0.2126 * rgba.red + 0.7152 * rgba.green + 0.0722 * rgba.blue
+            dark = luminance > 0.5
+            self.adw.StyleManager.get_default().set_color_scheme(
+                self.adw.ColorScheme.FORCE_DARK
+                if dark
+                else self.adw.ColorScheme.FORCE_LIGHT
+            )
+            self.p.logger.info(
+                f"Control Center: libadwaita palette set to "
+                f"{'dark' if dark else 'light'} (text luminance {luminance:.2f})"
+            )
+            return False
 
         def _flowbox_filter_func(self, child):
             """Internal GTK filter to ensure the FlowBox handles hidden children correctly."""

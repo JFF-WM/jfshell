@@ -260,7 +260,7 @@ class ConfigHandler:
                 "XDG_CONFIG_HOME", os.path.join(home, ".config")
             )
             config_path = os.path.join(xdg_config_home, "jfshell")
-            style_css_config = os.path.join(config_path, "shellow-styles.css")
+            style_css_config = os.path.join(config_path, "jfshell-styles.css")
             xdg_cache_home = os.getenv("XDG_CACHE_HOME", os.path.join(home, ".cache"))
             cache_folder = os.path.join(xdg_cache_home, "jfshell")
             Path(config_path).mkdir(parents=True, exist_ok=True)

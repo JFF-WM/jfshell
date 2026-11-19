@@ -60,6 +60,8 @@ def get_plugin_class():
             self.gtk = Gtk
             self.adw = Adw
             self.plugins["css_generator"].install_css("control-center.css")
+            # Maps libadwaita widget colours onto the active JFShell theme
+            self.plugins["css_generator"].install_css("control-center-adw.css")
             return False
 
         def on_start(self):

@@ -161,7 +161,7 @@ class Panel(Adw.Application):
         self.gtk_helpers.load_css_from_file()
 
         # Monitor ONLY the master generated styles.css
-        styles_css_path = self.path_handler.get_config_dir() / "shellow-styles.css"
+        styles_css_path = self.path_handler.get_config_dir() / "jfshell-styles.css"
         self.css_monitors = []
 
         gio_file_css = Gio.File.new_for_path(str(styles_css_path))

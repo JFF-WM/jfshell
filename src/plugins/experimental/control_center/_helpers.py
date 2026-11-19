@@ -317,6 +317,11 @@ class ControlCenterHelpers:
             self.display_notify(
                 f"Error saving theme setting: {e}", "dialog-error-symbolic"
             )
+        # The new theme's CSS lands asynchronously, so re-check the palette after it
+        if self.parent.win is not None:
+            self.parent.glib.timeout_add(
+                500, self.parent.ui.sync_color_scheme, self.parent.win
+            )
 
     def _generate_plugin_map(self, config):
         plugin_map = {}

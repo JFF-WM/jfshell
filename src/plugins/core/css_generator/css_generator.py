@@ -18,7 +18,7 @@ def get_plugin_class():
     from src.plugins.core._base import BasePlugin
 
     DEFAULT_THEME = "adwaita"
-    OUTPUT_CSS_FILE_NAME = "shellow-styles.css"
+    OUTPUT_CSS_FILE_NAME = "jfshell-styles.css"
     MY_ID = "org.jfshell.plugin.css_generator"
     # Identify themes by the standard resource path pattern
     THEME_INDICATOR = "resources/themes/css/"
