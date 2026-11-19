@@ -1,0 +1,5 @@
+#!/bin/sh
+# Launcher installed by `make install`; the @...@ placeholders are filled in then.
+: "${JFSHELL_SYSTEM_CONFIG:=@APPDIR@/config}"
+export JFSHELL_SYSTEM_CONFIG
+exec @PYTHON@ @APPDIR@/run.py "$@"
