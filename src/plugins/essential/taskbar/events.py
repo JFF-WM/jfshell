@@ -29,6 +29,7 @@ class TaskbarEvents:
             "view-title-changed",
             "overview-changed",
             "view-drag-changed",
+            "view-state-changed",
         ]
         for ev in events:
             mgr.subscribe_to_event(ev, self._handle_view_event, "taskbar")
@@ -64,6 +65,7 @@ class TaskbarEvents:
             "view-mapped",
             "view-title-changed",
             "view-app-id-changed",
+            "view-state-changed",
         ):
             if not self.plugin._debounce_pending:
                 from gi.repository import GLib

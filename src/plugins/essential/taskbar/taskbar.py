@@ -270,14 +270,39 @@ def get_plugin_class():
                     label_visible = True
 
             btn.view_id = view.get("id")
+            atop = bool(view.get("always-on-top"))
+            sticky = bool(view.get("sticky"))
             # Compositors emit change events constantly; skip GTK property
             # writes (which queue relayouts) when nothing visible changed.
-            state = (raw_title, ico, self.icon_size, label_text, label_visible)
+            state = (
+                raw_title,
+                ico,
+                self.icon_size,
+                label_text,
+                label_visible,
+                atop,
+                sticky,
+            )
             if getattr(btn, "_jfshell_state", None) == state:
                 return
             btn._jfshell_state = state  # pyright: ignore
 
-            btn.set_tooltip_text(raw_title)
+            flags = [
+                name
+                for name, on in (("Always on top", atop), ("Sticky", sticky))
+                if on
+            ]
+            btn.set_tooltip_text(
+                f"{raw_title}\n{' · '.join(flags)}" if flags else raw_title
+            )
+            for css, on in (("always-on-top", atop), ("sticky", sticky)):
+                if on:
+                    btn.add_css_class(css)
+                else:
+                    btn.remove_css_class(css)
+            btn.badge_atop.set_visible(atop)
+            btn.badge_sticky.set_visible(sticky)
+            btn.badges.set_visible(atop or sticky)
             btn.icon.set_from_icon_name(ico)
             btn.icon.set_pixel_size(self.icon_size)
             if label_text is not None:

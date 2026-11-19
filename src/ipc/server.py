@@ -51,6 +51,8 @@ class EventServer:
             "app-id": v.get("app_id") or "nil",
             "app_id": v.get("app_id") or "nil",
             "fullscreen": bool(v.get("fullscreen")),
+            "always-on-top": bool(v.get("always_on_top")),
+            "sticky": bool(v.get("sticky")),
             "workspace": v.get("workspace"),
             "output": v.get("output"),
         }
@@ -116,6 +118,14 @@ class EventServer:
 
         elif kind in ("maximized", "fullscreen") and ev["id"] in views:
             views[ev["id"]][kind] = bool(ev.get("on"))
+
+        elif kind in ("always-on-top", "sticky") and ev["id"] in views:
+            key = "always_on_top" if kind == "always-on-top" else "sticky"
+            views[ev["id"]][key] = bool(ev.get("on"))
+            yield {
+                "event": "view-state-changed",
+                "view": cls._view_msg(views[ev["id"]]),
+            }
 
         elif kind == "window-workspace" and ev["id"] in views:
             views[ev["id"]]["workspace"] = ev.get("workspace")

@@ -425,13 +425,17 @@ class IPC:
 
     @handle_ipc_error
     def set_window_always_on_top(self, window_id, on: bool = True) -> bool:
-        # jff has no always-on-top state.
-        return False
+        cmd = ("always-on-top" if on else "not-always-on-top") + (
+            f" {int(window_id)}" if window_id is not None else ""
+        )
+        return bool(jff_msg(cmd).get("ok"))
 
     @handle_ipc_error
     def set_window_sticky(self, window_id, on: bool = True) -> bool:
-        # jff has no sticky state.
-        return False
+        cmd = ("sticky" if on else "unsticky") + (
+            f" {int(window_id)}" if window_id is not None else ""
+        )
+        return bool(jff_msg(cmd).get("ok"))
 
     @handle_ipc_error
     def run_cmd(self, cmd: str) -> bool:
@@ -671,8 +675,8 @@ class IPC:
             "output": v.get("output"),
             "output-name": v.get("output"),
             "output-id": v.get("output"),
-            "always-on-top": False,
-            "sticky": False,
+            "always-on-top": bool(v.get("always_on_top")),
+            "sticky": bool(v.get("sticky")),
             "geometry": {
                 "x": v.get("x", 0),
                 "y": v.get("y", 0),

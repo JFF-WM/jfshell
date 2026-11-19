@@ -56,6 +56,9 @@ def get_plugin_class():
                 self.ipc_server.add_event_subscriber(
                     "view-drag-changed", self._on_event
                 )
+                self.ipc_server.add_event_subscriber(
+                    "view-state-changed", self._on_event
+                )
             except Exception as e:
                 self.logger.error(f"event_manager could not subscribe: {e}")
 

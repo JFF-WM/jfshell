@@ -59,7 +59,24 @@ class SingleTaskbarUI:
         button.label.set_max_width_chars(max(int(cfg.max_title_length), 1))  # pyright: ignore
         button.label.set_single_line_mode(True)  # pyright: ignore
 
+        # State badges, shown by update_button: always on top and sticky.
+        button.badge_atop = Gtk.Image.new_from_icon_name("go-top-symbolic")  # pyright: ignore
+        button.badge_sticky = Gtk.Image.new_from_icon_name("pin-symbolic")  # pyright: ignore
+        button.badges = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)  # pyright: ignore
+        button.badges.set_valign(Gtk.Align.CENTER)  # pyright: ignore
+        button.badges.set_visible(False)  # pyright: ignore
+        for badge, css in (
+            (button.badge_atop, "taskbar-badge-atop"),  # pyright: ignore
+            (button.badge_sticky, "taskbar-badge-sticky"),  # pyright: ignore
+        ):
+            badge.set_pixel_size(12)
+            badge.add_css_class("taskbar-badge")
+            badge.add_css_class(css)
+            badge.set_visible(False)
+            button.badges.append(badge)  # pyright: ignore
+
         box.append(button.icon)  # pyright: ignore
+        box.append(button.badges)  # pyright: ignore
         if cfg.show_label:
             box.append(button.label)  # pyright: ignore
 
