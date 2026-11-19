@@ -103,6 +103,40 @@ class GtkHelpers:
             return False
         return True
 
+    def _fit_to_bottom_bar(self, widget, plugin_name, tries=0):
+        # Sizes the main icon from the real height of the bar window, not from config
+        root = widget.get_root()
+        height = root.get_height() if root is not None else 0
+        if height <= 0:
+            if tries < 25:
+                GLib.timeout_add(
+                    200, self._fit_to_bottom_bar, widget, plugin_name, tries + 1
+                )
+            return False
+
+        from src.core.panel_mode import (
+            SINGLE_BUTTON_CHROME,
+            SINGLE_BUTTON_MARGIN,
+            SINGLE_MIN_BUTTON_HEIGHT,
+            SINGLE_PANEL_CHROME,
+        )
+
+        button_height = max(
+            height - SINGLE_PANEL_CHROME - 2 * SINGLE_BUTTON_MARGIN,
+            SINGLE_MIN_BUTTON_HEIGHT,
+        )
+        # Fill the button like the taskbar icons do, never below the stock 22px
+        icon_size = max(button_height - SINGLE_BUTTON_CHROME, 22)
+        image = widget.get_child()
+        if hasattr(image, "set_pixel_size"):
+            image.set_pixel_size(icon_size)
+        widget.set_size_request(button_height, button_height)
+        widget.set_valign(Gtk.Align.CENTER)
+        self.logger.info(
+            f"{plugin_name}: bar height {height}, button {button_height}, icon {icon_size}"
+        )
+        return False
+
     def set_plugin_main_icon(self, widget: Gtk.Widget, plugin_name, icon_name):
         """
         Sets the main icon using either a configured pixel size or natural size allocation.
@@ -119,6 +153,15 @@ class GtkHelpers:
         if icon_size is None:
             self.config_handler.set_root_setting([plugin_name, "main_icon_size"], -1)
             icon_size = -1
+
+        # Auto size (-1) in a bottom bar: fit icon and button once the bar is on screen
+        container = self.config_handler.get_root_setting([plugin_name, "container"], "")
+        if (
+            isinstance(icon_size, (int, float))
+            and icon_size <= 0
+            and str(container).startswith("bottom")
+        ):
+            widget.connect("map", self._fit_to_bottom_bar, plugin_name, 0)
 
         icon_name = self.icon_exist(icon_name, fallback_icons)
 

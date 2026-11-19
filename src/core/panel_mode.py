@@ -45,12 +45,14 @@ def _as_int(value, fallback):
         return fallback
 
 
-def single_panel_metrics(config_handler, icon_override: int = 0) -> dict:
+def single_panel_metrics(
+    config_handler, icon_override: int = 0, panel: str = "single"
+) -> dict:
     """Sizes shared by every widget of the single panel, derived from its height."""
     height = max(
         _as_int(
             config_handler.get_root_setting(
-                ["org.jfshell.panel", "single", "height"], SINGLE_DEFAULT_HEIGHT
+                ["org.jfshell.panel", panel, "height"], SINGLE_DEFAULT_HEIGHT
             ),
             SINGLE_DEFAULT_HEIGHT,
         ),
@@ -72,3 +74,17 @@ def single_panel_metrics(config_handler, icon_override: int = 0) -> dict:
         "icon_size": icon,
         "button_margin": SINGLE_BUTTON_MARGIN,
     }
+
+
+# Stock icon size of panel buttons (px), the -gtk-icon-size of the base CSS.
+BOTTOM_STOCK_ICON = 22
+
+
+def bottom_bar_metrics(config_handler, icon_override: int = 0) -> dict:
+    """Button height and icon size for widgets hosted in a bottom bar."""
+    if is_single_mode(config_handler):
+        return single_panel_metrics(config_handler, icon_override)
+    metrics = single_panel_metrics(config_handler, icon_override, "bottom")
+    # Never smaller than the stock size, so small classic panels look as before
+    metrics["icon_size"] = max(metrics["icon_size"], BOTTOM_STOCK_ICON)
+    return metrics

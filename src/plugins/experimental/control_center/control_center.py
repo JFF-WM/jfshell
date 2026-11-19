@@ -31,8 +31,17 @@ def get_plugin_class():
 
         def __init__(self, panel_instance):
             super().__init__(panel_instance)
+            # do_activate can be reached (e.g. from the app launcher) before the
+            # delayed start has run, so the state it reads must exist from here on.
+            self.win = None
+            self._initialized = False
+            self._css_installed = False
 
-        def delay_on_start(self):
+        def _initialize(self):
+            """Builds the UI/logic objects once; safe to call from any entry point."""
+            if self._initialized:
+                return
+            self._initialized = True
             self.config = {}
             self.widget_map = {}
             self.ui_key_to_plugin_id_map: Dict[str, str] = {}
@@ -59,9 +68,17 @@ def get_plugin_class():
 
             self.gtk = Gtk
             self.adw = Adw
-            self.plugins["css_generator"].install_css("control-center.css")
-            # Maps libadwaita widget colours onto the active JFShell theme
-            self.plugins["css_generator"].install_css("control-center-adw.css")
+
+        def _install_css(self):
+            """Registers the stylesheet once css_generator is available."""
+            css_generator = self.plugins.get("css_generator")
+            if css_generator and not self._css_installed:
+                css_generator.install_css("control-center.css")
+                self._css_installed = True
+
+        def delay_on_start(self):
+            self._initialize()
+            self._install_css()
             return False
 
         def on_start(self):
@@ -73,6 +90,8 @@ def get_plugin_class():
 
         def do_activate(self):
             """Initializes and presents the Control Center window."""
+            self._initialize()
+            self._install_css()
             if not self.win:
                 self.win = self.ui.create_window()
                 self.win.connect("close-request", self.on_close_request)

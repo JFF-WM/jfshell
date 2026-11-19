@@ -1,15 +1,17 @@
-def get_plugin_metadata(_):
+def get_plugin_metadata(panel):
     about = """
     Provides a user interface for managing and controlling system audio devices and volume settings.
     """
+    id = "org.jfshell.plugin.folders"
+    container, id = panel.config_handler.get_plugin_container("top-panel-left", id)
     return {
-        "id": "org.jfshell.plugin.folders",
+        "id": id,
         "name": "Folders",
         "version": "1.0.0",
         "enabled": True,
         "index": 2,
         "priority": 980,
-        "container": "top-panel-box-widgets-left",
+        "container": container,
         "deps": ["css_generator"],
         "description": about,
     }
@@ -40,7 +42,12 @@ def get_plugin_class():
             """
             self._home_path = pathlib.Path.home()
             self.popover_folders = None
-            self.plugin_id = get_plugin_metadata(self.panel).get("id")
+            metadata = get_plugin_metadata(self.panel)
+            self.plugin_id = metadata.get("id")
+            self.container = metadata["container"]
+            self.panel_window = self.panel_for_container(self.container)
+            # Popovers must open away from the panel edge they are attached to
+            self.opens_upward = self.container.startswith("bottom")
             self.main_icon = self.get_plugin_setting_add_hint(
                 ["main_icon"],
                 "folder-symbolic",
@@ -63,7 +70,7 @@ def get_plugin_class():
         def create_menu_popover_folders(self):
             """Creates the main menu button that triggers the folders popover."""
             self.layer_shell.set_keyboard_mode(
-                self.obj.top_panel, self.layer_shell.KeyboardMode.ON_DEMAND
+                self.panel_window, self.layer_shell.KeyboardMode.ON_DEMAND
             )
             self.menubutton_folders = self.gtk.Button()
             self.menubutton_folders.connect("clicked", self.open_popover_folders)
@@ -89,7 +96,10 @@ def get_plugin_class():
                 has_arrow=False,
                 closed_handler=self.popover_is_closed,
                 visible_handler=self.popover_is_open,
+                offset=(0, -5) if self.opens_upward else (0, 5),
             )
+            if self.opens_upward:
+                self.popover_folders.set_position(self.gtk.PositionType.TOP)
             self.popover_folders.set_autohide(True)
             show_searchbar_action = self.gio.SimpleAction.new("show_searchbar")
             show_searchbar_action.connect(
@@ -117,7 +127,7 @@ def get_plugin_class():
             self.listbox.connect(
                 "row-selected", lambda widget, row: self.open_folder(row)
             )
-            self.searchbar.set_key_capture_widget(self.obj.top_panel)
+            self.searchbar.set_key_capture_widget(self.panel_window)
             self.listbox.props.hexpand = True
             self.listbox.props.vexpand = True
             self.listbox.set_selection_mode(self.gtk.SelectionMode.SINGLE)
@@ -465,12 +475,12 @@ def get_plugin_class():
 
         def popover_is_open(self, *args):
             self.layer_shell.set_keyboard_mode(
-                self.obj.top_panel, self.layer_shell.KeyboardMode.ON_DEMAND
+                self.panel_window, self.layer_shell.KeyboardMode.ON_DEMAND
             )
 
         def popover_is_closed(self, *args):
             self.layer_shell.set_keyboard_mode(
-                self.obj.top_panel, self.layer_shell.KeyboardMode.NONE
+                self.panel_window, self.layer_shell.KeyboardMode.NONE
             )
 
         def on_show_searchbar_action_actived(self, action, parameter):

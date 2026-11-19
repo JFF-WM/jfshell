@@ -489,6 +489,12 @@ class PluginLoader:
                         plugin_id,
                         meta.get("hidden", False),
                     )
+                    # Widgets in a bottom bar are centered vertically instead of
+                    # hugging the top edge next to a taller neighbour (the taskbar).
+                    if container.startswith("bottom"):
+                        flow = self.plugin_containers.get(f"{plugin_id}_box")
+                        if flow:
+                            flow.set_valign(Gtk.Align.CENTER)
         except Exception as e:
             self.logger.error(f"Failed init {plugin_id}: {e}")
         return False

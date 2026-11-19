@@ -3,7 +3,7 @@ def get_plugin_metadata(panel):
     Returns the metadata for the App Launcher plugin.
     """
     about = "A dynamic application launcher with a search bar and a grid view of installed and recently used applications."
-    default_container = "top-panel-box-widgets-left"
+    default_container = "top-panel-left"
     id = "org.jfshell.plugin.app_launcher"
     CONTAINER, id = panel.config_handler.get_plugin_container(default_container, id)
     return {
@@ -51,6 +51,10 @@ def get_plugin_class():
 
         def on_start(self):
             """Triggered when the plugin starts. Initializes UI and database."""
+            self.container = get_plugin_metadata(self.obj)["container"]
+            self.panel_window = self.panel_for_container(self.container)
+            # Popovers must open away from the panel edge they are attached to
+            self.opens_upward = self.container.startswith("bottom")
             self.remote_widgets = []
             self.search_timeout_id = None
             self.popover_width = self.get_plugin_setting_add_hint(
@@ -273,7 +277,10 @@ def get_plugin_class():
                 has_arrow=False,
                 closed_handler=self.popover_is_closed,
                 visible_handler=self.popover_is_open,
+                offset=(0, -5) if self.opens_upward else (0, 5),
             )
+            if self.opens_upward:
+                popover.set_position(self.gtk.PositionType.TOP)
             show_searchbar_action = self.gio.SimpleAction.new("show_searchbar")
             show_searchbar_action.connect(
                 "activate", self.on_show_searchbar_action_actived
@@ -777,13 +784,13 @@ def get_plugin_class():
         def popover_is_open(self, *_):
             """Handles UI logic when the popover opens."""
             self.update_flowbox()
-            self.set_keyboard_on_demand()
+            self.set_keyboard_on_demand(panel=self.panel_window)
             vadjustment = self.scrolled_window.get_vadjustment()
             vadjustment.set_value(0)
 
         def popover_is_closed(self, *_):
             """Handles UI logic when the popover closes."""
-            self.set_keyboard_on_demand(False)
+            self.set_keyboard_on_demand(False, panel=self.panel_window)
             for widget in list(self.remote_widgets):
                 if widget.get_parent():
                     self.flowbox.remove(widget)

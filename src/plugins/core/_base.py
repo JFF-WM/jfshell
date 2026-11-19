@@ -206,18 +206,30 @@ class BasePlugin:
         self.add_hint(hint, key)
         return self.get_plugin_setting(key, default_value)
 
-    def set_keyboard_on_demand(self, mode=True):
-        """Set the keyboard mode to ON_DEMAND."""
+    def panel_for_container(self, container: str) -> Any:
+        """Return the panel window that hosts a container such as 'bottom-panel-center'.
+
+        Falls back to the top panel when that side has no window of its own,
+        for example in single-panel mode.
+        """
+        side = container.split("-")[0]
+        window = getattr(self.obj, f"{side}_panel", None)
+        return window if window is not None else self.obj.top_panel
+
+    def set_keyboard_on_demand(self, mode=True, panel=None):
+        """Set the keyboard mode to ON_DEMAND on ``panel`` (default: the top panel)."""
+        if panel is None:
+            panel = self.obj.top_panel
         if mode is True:
             self._layer_shell.set_keyboard_mode(
-                self._panel_instance.top_panel, self._layer_shell.KeyboardMode.ON_DEMAND
+                panel, self._layer_shell.KeyboardMode.ON_DEMAND
             )
         if mode is False:
             self._layer_shell.set_keyboard_mode(
-                self.obj.top_panel, self._layer_shell.KeyboardMode.NONE
+                panel, self._layer_shell.KeyboardMode.NONE
             )
-            self.obj.top_panel.grab_focus()
-            toplevel = self.obj.top_panel.get_root()
+            panel.grab_focus()
+            toplevel = panel.get_root()
             if isinstance(toplevel, self.gtk.Window):
                 toplevel.set_focus(None)
 
