@@ -128,6 +128,20 @@ class SingleTaskbarMenu:
         if self.menu:
             self.menu.popdown()
 
+    def muted_pids(self):
+        """PIDs whose PulseAudio streams are all muted, empty when Pulse fails."""
+        state = {}
+        try:
+            for stream in self.pulse.sink_input_list():
+                pid = stream.proplist.get("application.process.id")
+                if pid is None or not str(pid).isdigit():
+                    continue
+                pid = int(pid)
+                state[pid] = state.get(pid, True) and bool(stream.mute)
+        except Exception:
+            return set()
+        return {pid for pid, muted in state.items() if muted}
+
     # --- CORE LOGIC HANDLERS ---
 
     def _toggle_process_state(self, vid, stop):
@@ -186,11 +200,13 @@ class SingleTaskbarMenu:
     def _on_menu_mute_clicked(self, _):
         vid = self.menu.active_view_id  # pyright: ignore
         self._toggle_audio_mute(vid, True)
+        self.plugin.Taskbar()
         self.menu.popdown()
 
     def _on_menu_unmute_clicked(self, _):
         vid = self.menu.active_view_id  # pyright: ignore
         self._toggle_audio_mute(vid, False)
+        self.plugin.Taskbar()
         self.menu.popdown()
 
     def _on_menu_fullscreen_clicked(self, _):
