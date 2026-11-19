@@ -212,9 +212,7 @@ class TaskbarMenu:
         self.menu.popdown()
 
     def _on_menu_move_next_clicked(self, _):
-        self.plugin.compositor_helper.send_view_to_output(
-            self.menu.active_view_id, None, True
-        )  # pyright: ignore
+        self.ipc.move_window_to_monitor(self.menu.active_view_id, "next")  # pyright: ignore
         self.menu.popdown()
 
     def _check_hanging_process(self, vid):

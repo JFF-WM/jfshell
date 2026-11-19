@@ -438,6 +438,17 @@ class IPC:
         return bool(jff_msg(cmd).get("ok"))
 
     @handle_ipc_error
+    def move_window_to_monitor(self, window_id=None, target: str = "next") -> bool:
+        """Send a window to another monitor with jff's ``move-to-monitor``.
+
+        ``target`` is left, right, up, down, next, prev or a monitor name.
+        """
+        cmd = f"move-to-monitor {target}" + (
+            f" {int(window_id)}" if window_id is not None else ""
+        )
+        return bool(jff_msg(cmd).get("ok"))
+
+    @handle_ipc_error
     def run_cmd(self, cmd: str) -> bool:
         """Run ``cmd`` through jff's ``spawn-sh`` (i.e. ``sh -c <cmd>``).
 
