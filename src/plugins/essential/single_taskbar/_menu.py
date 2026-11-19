@@ -128,19 +128,24 @@ class SingleTaskbarMenu:
         if self.menu:
             self.menu.popdown()
 
-    def muted_pids(self):
-        """PIDs whose PulseAudio streams are all muted, empty when Pulse fails."""
-        state = {}
+    def audio_pids(self):
+        """PIDs whose PulseAudio streams are all muted, and PIDs with a running one.
+
+        Both sets are empty when Pulse fails.
+        """
+        muted, playing = {}, set()
         try:
             for stream in self.pulse.sink_input_list():
                 pid = stream.proplist.get("application.process.id")
                 if pid is None or not str(pid).isdigit():
                     continue
                 pid = int(pid)
-                state[pid] = state.get(pid, True) and bool(stream.mute)
+                muted[pid] = muted.get(pid, True) and bool(stream.mute)
+                if not stream.corked:
+                    playing.add(pid)
         except Exception:
-            return set()
-        return {pid for pid, muted in state.items() if muted}
+            return set(), set()
+        return {pid for pid, is_muted in muted.items() if is_muted}, playing
 
     # --- CORE LOGIC HANDLERS ---
 

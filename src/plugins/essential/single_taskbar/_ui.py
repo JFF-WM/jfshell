@@ -59,9 +59,10 @@ class SingleTaskbarUI:
         button.label.set_max_width_chars(max(int(cfg.max_title_length), 1))  # pyright: ignore
         button.label.set_single_line_mode(True)  # pyright: ignore
 
-        # State badges, shown by update_button: always on top, sticky and muted.
+        # State badges, shown by update_button: always on top, sticky, playing audio and muted.
         button.badge_atop = Gtk.Image.new_from_icon_name("go-top-symbolic")  # pyright: ignore
         button.badge_sticky = Gtk.Image.new_from_icon_name("pin-symbolic")  # pyright: ignore
+        button.badge_playing = Gtk.Image.new_from_icon_name("audio-volume-high-symbolic")  # pyright: ignore
         button.badge_muted = Gtk.Image.new_from_icon_name("audio-volume-muted-symbolic")  # pyright: ignore
         button.badges = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)  # pyright: ignore
         button.badges.set_valign(Gtk.Align.CENTER)  # pyright: ignore
@@ -69,6 +70,7 @@ class SingleTaskbarUI:
         for badge, css in (
             (button.badge_atop, "taskbar-badge-atop"),  # pyright: ignore
             (button.badge_sticky, "taskbar-badge-sticky"),  # pyright: ignore
+            (button.badge_playing, "taskbar-badge-playing"),  # pyright: ignore
             (button.badge_muted, "taskbar-badge-muted"),  # pyright: ignore
         ):
             badge.set_pixel_size(12)

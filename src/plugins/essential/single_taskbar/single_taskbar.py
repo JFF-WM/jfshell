@@ -125,9 +125,10 @@ def get_plugin_class():
             ]
             focused_id = next((v.get("id") for v in views if v.get("is_focused")), None)
             # PulseAudio is not part of jff's window state: look it up once per sync.
-            muted_pids = self.menu_handler.muted_pids()
+            muted_pids, playing_pids = self.menu_handler.audio_pids()
             for v in views:
                 v["muted"] = v.get("pid") in muted_pids
+                v["playing"] = v.get("pid") in playing_pids
 
             if self.group_apps:
                 grouped_data = {}
@@ -292,6 +293,8 @@ def get_plugin_class():
             atop = bool(view.get("always-on-top"))
             sticky = bool(view.get("sticky"))
             muted = bool(view.get("muted"))
+            # A muted stream makes no sound, so it only counts as muted.
+            playing = bool(view.get("playing")) and not muted
             # Compositors emit change events constantly; skip GTK property
             # writes (which queue relayouts) when nothing visible changed.
             state = (
@@ -303,6 +306,7 @@ def get_plugin_class():
                 atop,
                 sticky,
                 muted,
+                playing,
             )
             if getattr(btn, "_jfshell_state", None) == state:
                 return
@@ -314,6 +318,7 @@ def get_plugin_class():
                     ("Always on top", atop),
                     ("Sticky", sticky),
                     ("Muted", muted),
+                    ("Playing audio", playing),
                 )
                 if on
             ]
@@ -324,6 +329,7 @@ def get_plugin_class():
                 ("always-on-top", atop),
                 ("sticky", sticky),
                 ("muted", muted),
+                ("playing", playing),
             ):
                 if on:
                     btn.add_css_class(css)
@@ -331,13 +337,17 @@ def get_plugin_class():
                     btn.remove_css_class(css)
             btn.badge_atop.set_visible(atop)
             btn.badge_sticky.set_visible(sticky)
+            btn.badge_playing.set_visible(playing)
             btn.badge_muted.set_visible(muted)
-            btn.badges.set_visible(atop or sticky or muted)
+            btn.badges.set_visible(atop or sticky or muted or playing)
             btn.icon.set_from_icon_name(ico)
             btn.icon.set_pixel_size(self.icon_size)
             if label_text is not None:
                 btn.label.set_label(label_text)
             btn.label.set_visible(label_visible)
+
+        def on_disable(self):
+            self.event_handler.stop_audio_watch()
 
         def on_view_focused(self, view: dict) -> None:
             self.view_handler.handle_focus_change(view)
