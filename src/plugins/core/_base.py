@@ -780,29 +780,3 @@ class BasePlugin:
         non-blocking asynchronous and concurrent operations.
         """
         return self.about.__doc__
-
-    def code_explanation(self):
-        """
-        The `BasePlugin` class is the foundational component of jfshell's
-        plugin architecture. Key logic includes:
-        1.  **Concurrency Integration**: The constructor injects the global
-            `asyncio` event loop and `ThreadPoolExecutor`, providing access
-            via `self.global_loop` and `self.global_executor`. Helper methods
-            (`run_in_thread`, `run_in_async_task`) simplify safe, non-blocking
-            operations and now **automatically track** their running state.
-        2.  **Safe Cleanup (`disable`)**: The improved `disable()` method now automatically
-            iterates over `self._running_tasks` and `self._running_futures` to call
-            `.cancel()` on any active asynchronous or background thread work,
-            ensuring graceful termination before calling the custom `on_disable()` hook.
-            The type hint for `self._running_futures` was updated to `Set[Future[Any]]`
-            to resolve type-checking errors.
-        3.  **GTK Synchronization**: The critical `schedule_in_gtk_thread` method
-            uses `GLib.idle_add` to ensure any UI updates originating from a
-            background thread or async task are safely executed on the main
-            GTK thread, preventing crashes.
-        4.  **Resource Injection & Safety**: Provides core resources (logger, IPC,
-            config) and helper instances (`cmd`, `gtk_helper`) via read-only
-            `@property` access, ensuring type safety and preventing accidental
-            modification of shared components.
-        """
-        return self.code_explanation.__doc__

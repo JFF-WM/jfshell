@@ -129,21 +129,4 @@ def get_plugin_class():
             """An example plugin that demonstrates how to create a UI widget and broadcast a message via the IPC server."""
             return self.about.__doc__
 
-        def code_explanation(self):
-            """
-            This plugin is an example demonstrating how to create a simple user
-            interface (UI) element and use the Inter-Process Communication (IPC)
-            system to broadcast a message to other components.
-            The core logic is centered on **event-driven UI and IPC broadcasting**:
-            1.  **UI Creation**: It creates a Gtk.Button and sets it as the main
-                widget, specifying its placement on the top-right of the panel.
-            2.  **Event Handling**: It connects the button's "clicked" signal to the
-                `on_button_clicked` method, which correctly schedules the
-                asynchronous `broadcast_message` using `asyncio.create_task`.
-            3.  **IPC Broadcasting**: The `broadcast_message` method then uses the
-                `ipc_server` to send a predefined message to any other plugin or
-                client that is listening for the "custom_message" event.
-            """
-            return self.code_explanation.__doc__
-
     return ExampleBroadcastPlugin

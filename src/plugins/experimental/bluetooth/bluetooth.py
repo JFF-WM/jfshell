@@ -363,27 +363,4 @@ def get_plugin_class():
             except Exception as e:
                 self.logger.error(f"D-Bus Connect failed: {e}")
 
-        def code_explanation(self):
-            """
-            This plugin acts as a user-friendly interface for the system's
-            Bluetooth functionality.
-            **Refactoring Summary:**
-            - **Protocol Transition:** Replaced the external 'bluetoothctl'
-              binary dependency with 'dbus-fast'.
-            - **D-Bus Integration:** Implemented direct communication with
-              the BlueZ System Bus (BusType.SYSTEM) via the D-Bus
-              ObjectManager interface.
-            - **Lazy Connection Pattern:** Added an asynchronous lock
-              mechanism (_bus_lock) and a helper method (_ensure_bus) to
-              prevent race conditions and ensure the MessageBus is fully
-              connected before introspection or method calls.
-            - **Path Normalization:** Automates the conversion of MAC
-              addresses to BlueZ object paths (e.g., replacing ':' with '_')
-              to interact with Device1 interfaces.
-            - **Audio Synchronization:** Maintains the PulseAudio sink
-              management logic, ensuring that connected audio devices are
-              automatically set as the default output through 'pulsectl'.
-            """
-            return self.code_explanation.__doc__
-
     return Bluetooth

@@ -104,14 +104,4 @@ def get_plugin_class():
                 self.glib.source_remove(self.update_timeout_id)
                 self.update_timeout_id = None
 
-        def code_explanation(self):
-            """
-            The core logic of this plugin is to display a real-time clock. It
-            efficiently schedules UI updates to align with the start of each new
-            minute, which maximizes accuracy while minimizing resource usage. The plugin
-            also includes graceful error handling to prevent any display or formatting
-            errors from crashing the application.
-            """
-            return self.code_explanation.__doc__
-
     return ClockPlugin

@@ -356,27 +356,4 @@ def get_plugin_class():
                 self.update_task.cancel()
                 self.logger.info("Cancelled weather periodic update task.")
 
-        def code_explanation(self):
-            """
-            Explains the core architecture of the plugin.
-            1.  **Configuration**: Reads coordinates from `self.get_root_setting` in `__init__`.
-            2.  **Concurrency**: Uses `BasePlugin` helpers. `self.run_in_async_task()` launches
-                fire-and-forget tasks, while `self.global_loop.create_task()` creates
-                the manageable background task, which is explicitly cancelled in `on_stop`.
-            3.  **Async I/O**: The blocking `self.requests.get` call is run in a
-                separate thread using `await self.asyncio.to_thread(...)` to keep
-                the main event loop responsive.
-            4.  **Thread Safety**: All GTK UI modifications are safely dispatched
-                to the main thread via `self.schedule_in_gtk_thread()`.
-            5.  **UI Structure**: Replaced the monolithic `Gtk.Label` with a `Gtk.Grid`.
-                This component-based approach isolates individual data points
-                (e.g., `self.temp_value_label`) for precise updates and reliable
-                tabular alignment, independent of font size or content length.
-            6.  **Data Processing**: The `_process_weather_data` method parses the
-                API JSON. It extracts the *current* temperature from `timeseries[0]`
-                and calculates 24-hour averages by iterating over the first 24
-                hourly entries.
-            """
-            return self.code_explanation.__doc__
-
     return WeatherPlugin

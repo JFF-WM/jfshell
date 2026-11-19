@@ -134,25 +134,4 @@ def get_plugin_class():
             else:
                 self.logger.warning(f"No command defined for action: '{action_label}'")
 
-        def code_explanation(self):
-            """
-            This plugin creates a quick actions menu using the framework's best practices.
-            1.  **Asynchronous Lifecycle**: All UI setup is deferred to the `on_start`
-                method, ensuring the GTK environment is fully initialized. `__init__`
-                is kept lightweight for fast plugin loading.
-            2.  **Reusable UI Component**: Instead of manually building a popover, it
-                uses the `self.create_dashboard_popover` helper. The UI is defined
-                declaratively via the `button_config` dictionary, promoting consistency
-                and reducing boilerplate.
-            3.  **Centralized Action Handling**: A single `_on_action` method serves as
-                a dispatcher, mapping button labels to their corresponding system commands.
-                This is cleaner and more maintainable than connecting a separate callback
-                for each button.
-            4.  **Safe Command Execution**: All shell commands are executed via `self.run_cmd(...)`.
-                This is the architecturally correct approach, as it uses the `BasePlugin`'s
-                `CommandRunner` which runs commands in a non-blocking background thread,
-                preventing the UI from freezing. It is a direct, safer replacement for `os.system`.
-            """
-            return self.code_explanation.__doc__
-
     return QuickActionsPlugin

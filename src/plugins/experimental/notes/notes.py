@@ -765,16 +765,4 @@ def get_plugin_class():
             """
             return self.about.__doc__
 
-        def code_explanation(self):
-            """
-            This plugin implements the Model-View-Controller (MVC) pattern:
-            1. Model (`NotesManager`): Handles asynchronous database I/O using aiosqlite.
-            2. View/Controller (`MenuNotes`): Manages the GTK UI (Gtk.Popover, Gtk.ListBox) and user interaction.
-            Architectural Enhancements:
-            - **Configuration Externalization**: Core constants (sizing, labels, icons) are exposed via `self.get_plugin_setting_add_hint` in `__init__`, making the plugin robust to user preference changes.
-            - **Optimized Layout Setting**: GTK size negotiation properties (`set_vexpand`, `set_propagate_natural_height`, `set_max_content_height`) are set only once in `create_popover_notes`, preventing redundant calls during list updates (`update_notes_list`) and ensuring correct initial size calculation.
-            - **Asynchronous Data Access**: Database operations are safely offloaded using `asyncio.run` within thread wrappers, preventing UI thread blocking.
-            """
-            return self.code_explanation.__doc__
-
     return MenuNotes

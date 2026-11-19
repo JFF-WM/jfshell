@@ -76,7 +76,4 @@ def get_plugin_class():
         def about(self):
             return "Registers global GIO actions which can be bound to keyboard shortcuts by the user's system."
 
-        def code_explanation(self):
-            return self.about()
-
     return GlobalShortcuts

@@ -318,19 +318,4 @@ def get_plugin_class():
                 clipboard.set_content(self.gdk.ContentProvider.new_for_value(state.kdl))
             self.page.set_note("Copied the changed lines for the output block.")
 
-        def code_explanation(self):
-            """
-            The plugin builds one page for the clock popover and registers it
-            with the calendar plugin, which owns the popover and its sidebar.
-            While the page is visible it reads the monitor's HDR state from
-            jff every few seconds on a background thread, and every change
-            (switch, slider, dropdown, reset) is one short request to jff's
-            socket on a background thread followed by a fresh reading, so the
-            page always shows what the monitor really does. Each change is
-            also written to the plugin's config, and the "Restore settings on
-            start" switch in the page header decides whether those saved
-            values are pushed back to jff after a jfshell restart.
-            """
-            return self.code_explanation.__doc__
-
     return HdrPlugin

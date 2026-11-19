@@ -171,31 +171,3 @@ class CalendarNotesPlugin(BasePlugin):
         using a persistent SQLite database.
         """
         return self.about.__doc__
-
-    def code_explanation(self):
-        """
-        The core logic of this plugin is based on an architectural
-        pattern of dependency injection and asynchronous data
-        handling. Its key principles are:
-        1.  **UI Augmentation**: This plugin operates as a dependent
-            component. It does not create its own top-level window or
-            button but instead dynamically attaches a notes display
-            (`Gtk.ListBox`) to the existing calendar popover, enhancing
-            its functionality.
-        2.  **Asynchronous Data Persistence**: All note data is stored
-            in a local SQLite database managed by the `aiosqlite`
-            library. This allows for non-blocking database operations,
-            which is essential for keeping the application responsive
-            while fetching or saving notes.
-        3.  **Cross-Event Loop Communication**: The plugin connects
-            synchronous GTK UI events, such as a day being selected, to
-            its asynchronous data fetching routines by using `asyncio.run`.
-            This is a crucial pattern for bridging the gap between GTK's
-            main loop and `asyncio`'s event loop.
-        4.  **Dynamic UI and Data Mapping**: The plugin provides a visual
-            cue to the user by marking days on the calendar that have
-            associated notes. It dynamically loads and displays the notes
-            in a listbox, ensuring the UI accurately reflects the data
-            for the currently selected date.
-        """
-        return self.code_explanation.__doc__

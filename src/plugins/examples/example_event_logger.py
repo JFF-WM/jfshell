@@ -171,26 +171,4 @@ def get_plugin_class():
             """Handle incoming events from jff IPC"""
             self.logger.info(event_data)
 
-        def code_explanation(self):
-            """
-            This plugin acts as a comprehensive event listener for the jff compositor.
-            It subscribes to a predefined list of known Inter-Process Communication (IPC)
-            events and logs their data.
-
-            Its core logic is centered on **event subscription and passive monitoring**:
-
-            1.  **Event List**: It defines a static list, `ALL_EVENTS`, which contains
-                the names of all relevant jff IPC events.
-            2.  **Subscription Loop**: In the `subscribe_to_events` method, it iterates
-                through this list and uses the `event_manager` to subscribe the
-                `handle_event` method as a callback for each event.
-            3.  **Event Handling**: The `handle_event` method is a simple but crucial
-                callback. When any of the subscribed events occur, the system sends
-                the event data to this method, which logs the entire payload.
-            4.  **Purpose**: This makes it a valuable background tool for debugging
-                and understanding the flow of events within the jff environment,
-                without a visible UI.
-            """
-            return self.code_explanation.__doc__
-
     return EventLoggerPlugin
