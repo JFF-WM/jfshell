@@ -273,7 +273,7 @@ class Panel(Adw.Application):
         )
         width = self.get_setting_add_hint(
             ["org.jfshell.panel", "bottom", "width"],
-            self.monitor_width,
+            -1,  # -1: the window is as wide as the dock, not the monitor
             "Width of the bottom panel",
         )
         height = self.get_setting_add_hint(

@@ -1,23 +1,23 @@
 :root {
   /* ================================================= */
-  /* ==== CORE PALETTE - FULLY TRANSPARENT ============ */
+  /* ==== CORE PALETTE - FULLY #00000082 ============ */
   /* ================================================= */
 
-  --color-bg-base: transparent;
-  --color-bg-window: transparent;
-  --color-bg-panel: transparent;
-  --color-bg-popover: transparent;
-  --color-bg-searchbar: transparent;
-  --color-bg-box-primary: transparent;
-  --color-bg-box-secondary: transparent;
-  --color-bg-button: transparent;
-  --color-bg-button-hover: transparent;
-  --color-bg-button-active: transparent;
-  --color-bg-surface: transparent;
-  --color-bg-raised: transparent;
-  --color-bg-deep: transparent;
-  --color-bg-alt-row: transparent;
-  --color-bg-transparent-active: transparent;
+  --color-bg-base: #00000082;
+  --color-bg-window: #00000082;
+  --color-bg-panel: #00000082;
+  --color-bg-popover: #00000082;
+  --color-bg-searchbar: #00000082;
+  --color-bg-box-primary: #00000082;
+  --color-bg-box-secondary: #00000082;
+  --color-bg-button: #00000082;
+  --color-bg-button-hover: #00000082;
+  --color-bg-button-active: #00000082;
+  --color-bg-surface: #00000082;
+  --color-bg-raised: #00000082;
+  --color-bg-deep: #00000082;
+  --color-bg-alt-row: #00000082;
+  --color-bg-active: #00000082;
 
   --color-vibrancy-dark-blur: none;
   --color-vibrancy-light-blur: none;
@@ -36,77 +36,77 @@
   --color-status-success: #4ade80;
   --color-status-danger: #f87171;
   --color-status-warning: #fbbf24;
-  --color-separator-line: transparent;
-  --color-shadow-hue-bleed: transparent;
+  --color-separator-line: #00000082;
+  --color-shadow-hue-bleed: #00000082;
 
-  --color-status-success-bg: transparent;
-  --color-status-danger-bg: transparent;
-  --color-status-warning-bg: transparent;
+  --color-status-success-bg: #00000082;
+  --color-status-danger-bg: #00000082;
+  --color-status-warning-bg: #00000082;
 
-  --color-shadow-dark: transparent;
-  --color-shadow-medium: transparent;
-  --color-shadow-lighter: transparent;
+  --color-shadow-dark: #00000082;
+  --color-shadow-medium: #00000082;
+  --color-shadow-lighter: #00000082;
 
   /* ================================================= */
   /* ===== HIERARCHICAL UI SURFACES (BACKGROUNDS) ==== */
   /* ================================================= */
 
-  --theme-bg-view-primary: transparent;
-  --theme-bg-view-secondary: transparent;
-  --theme-bg-view-tertiary: transparent;
-  --theme-bg-view-vibrant: transparent;
+  --theme-bg-view-primary: #00000082;
+  --theme-bg-view-secondary: #00000082;
+  --theme-bg-view-tertiary: #00000082;
+  --theme-bg-view-vibrant: #00000082;
 
-  --theme-bg-control-base: transparent;
+  --theme-bg-control-base: #00000082;
   --theme-bg-selected-primary: var(--color-accent-blue);
-  --theme-bg-selected-inactive: transparent;
-  --theme-bg-selected-secondary: transparent;
+  --theme-bg-selected-inactive: #00000082;
+  --theme-bg-selected-secondary: #00000082;
   --theme-bg-text-selection: rgba(64, 169, 255, 0.35);
 
-  --theme-bg-under-page: transparent;
-  --theme-bg-alternating-row: transparent;
+  --theme-bg-under-page: #00000082;
+  --theme-bg-alternating-row: #00000082;
   --theme-bg-find-highlight: rgba(251, 191, 36, 0.4);
-  --theme-bg-acrylic-backdrop: transparent;
+  --theme-bg-acrylic-backdrop: #00000082;
 
   /* ================================================= */
   /* ==== ADVANCED GTK/WIDGET BACKGROUNDS ============= */
   /* ================================================= */
 
-  --color-bg-entry-base: transparent;
-  --color-bg-entry-focus: transparent;
-  --color-bg-entry-disabled: transparent;
-  --color-bg-textview: transparent;
+  --color-bg-entry-base: #00000082;
+  --color-bg-entry-focus: #00000082;
+  --color-bg-entry-disabled: #00000082;
+  --color-bg-textview: #00000082;
 
-  --color-bg-button-flat: transparent;
-  --color-bg-button-flat-hover: transparent;
-  --color-bg-button-flat-active: transparent;
-  --color-bg-button-normal: transparent;
-  --color-bg-button-normal-hover: transparent;
-  --color-bg-button-normal-active: transparent;
+  --color-bg-button-flat: #00000082;
+  --color-bg-button-flat-hover: #00000082;
+  --color-bg-button-flat-active: #00000082;
+  --color-bg-button-normal: #00000082;
+  --color-bg-button-normal-hover: #00000082;
+  --color-bg-button-normal-active: #00000082;
   --color-bg-button-suggested: var(--color-accent-blue);
   --color-bg-button-suggested-hover: var(--color-accent-blue-dark);
 
-  --color-bg-menu-bar: transparent;
-  --color-bg-menu-popup: transparent;
-  --color-bg-menu-item-hover: transparent;
-  --color-bg-popover-content: transparent;
+  --color-bg-menu-bar: #00000082;
+  --color-bg-menu-popup: #00000082;
+  --color-bg-menu-item-hover: #00000082;
+  --color-bg-popover-content: #00000082;
 
-  --color-bg-list-header: transparent;
-  --color-bg-tab-bar: transparent;
-  --color-bg-tab-active: transparent;
-  --color-bg-tab-inactive: transparent;
-  --color-bg-tab-hover: transparent;
-  --color-bg-treeview-header: transparent;
+  --color-bg-list-header: #00000082;
+  --color-bg-tab-bar: #00000082;
+  --color-bg-tab-active: #00000082;
+  --color-bg-tab-inactive: #00000082;
+  --color-bg-tab-hover: #00000082;
+  --color-bg-treeview-header: #00000082;
 
-  --color-bg-toggle-off: transparent;
+  --color-bg-toggle-off: #00000082;
   --color-bg-toggle-on: var(--color-accent-blue);
-  --color-bg-check-radio-box: transparent;
+  --color-bg-check-radio-box: #00000082;
 
-  --color-bg-scrollbar-track: transparent;
-  --color-bg-scrollbar-slider: transparent;
-  --color-bg-scrollbar-slider-hover: transparent;
+  --color-bg-scrollbar-track: #00000082;
+  --color-bg-scrollbar-slider: #00000082;
+  --color-bg-scrollbar-slider-hover: #00000082;
 
-  --color-bg-status-bar: transparent;
-  --color-bg-tooltip: transparent;
+  --color-bg-status-bar: #00000082;
+  --color-bg-tooltip: #00000082;
 
   /* ================================================= */
   /* ======== FOREGROUND ELEMENTS (TEXT & ICONS) ======= */
@@ -131,12 +131,12 @@
   /* ============= DECORATION & SEPARATORS ============= */
   /* ================================================= */
 
-  --theme-decoration-separator: transparent;
-  --theme-decoration-grid-line: transparent;
+  --theme-decoration-separator: #00000082;
+  --theme-decoration-grid-line: #00000082;
   --theme-decoration-keyboard-focus:
-    0 0 0 2px transparent, 0 0 0 4px var(--color-accent-blue);
-  --theme-decoration-border-control: transparent;
-  --color-border-entry-base: transparent;
+    0 0 0 2px #00000082, 0 0 0 4px var(--color-accent-blue);
+  --theme-decoration-border-control: #00000082;
+  --color-border-entry-base: #00000082;
   --color-border-entry-focus: var(--color-accent-blue);
   --color-focus-ring: var(--color-accent-blue);
 
@@ -149,16 +149,16 @@
   --theme-status-success: var(--color-status-success);
   --theme-status-danger: var(--color-status-danger);
   --theme-status-warning: var(--color-status-warning);
-  --theme-status-highlight-virtual: transparent;
+  --theme-status-highlight-virtual: #00000082;
 
   /* ================================================= */
   /* ====== SEMANTIC MAPPING (USED BY BASE CSS) ====== */
   /* ================================================= */
 
-  --primary-bg: transparent;
-  --secondary-bg: transparent;
-  --tertiary-bg: transparent;
-  --header-border: transparent;
+  --primary-bg: #00000082;
+  --secondary-bg: #00000082;
+  --tertiary-bg: #00000082;
+  --header-border: #00000082;
 
   --main-text: var(--theme-fg-label-primary);
   --soft-text: var(--theme-fg-label-secondary);
@@ -168,20 +168,20 @@
   --success-green: var(--theme-status-success);
   --danger-red: var(--theme-status-danger);
 
-  --success-green-light: transparent;
-  --window-control-hover-bg: transparent;
-  --window-control-border-color: transparent;
+  --success-green-light: #00000082;
+  --window-control-hover-bg: #00000082;
+  --window-control-border-color: #00000082;
 
-  --dseg-shadow-soft: transparent;
-  --dseg-shadow-dark: transparent;
+  --dseg-shadow-soft: #00000082;
+  --dseg-shadow-dark: #00000082;
 
   /* ================================================= */
   /* =============== SHADOWS AND OPACITY ============== */
   /* ================================================= */
 
-  --shadow-dark: transparent;
-  --shadow-medium: transparent;
-  --shadow-subtle-white: transparent;
+  --shadow-dark: #00000082;
+  --shadow-medium: #00000082;
+  --shadow-subtle-white: #00000082;
 
   --opacity-0: 0;
   --opacity-08: 0;

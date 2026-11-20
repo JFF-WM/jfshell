@@ -1,89 +1,92 @@
-/* Dock Taskbar - GNOME dash look.
- *
- * Place next to dock_taskbar.py (src/plugins/essential/dock_taskbar/).
- * The plugin calls install_css("dock_taskbar.css") and the CSS generator also
- * imports <short_id>.css from the plugin folder, so no code change is needed.
- *
- * Colours come from the active theme (--main-text, --primary-bg,
- * --theme-status-accent, --radius-s). Each translucent colour is written twice:
- * a plain rgba() fallback first, then a color-mix() version that follows the
- * theme. If the GTK build does not understand color-mix(), the fallback stays.
- *
- * Classes set by _ui.py:
- *   .dock-taskbar            the box holding everything
- *   .dock-taskbar-button     one app; states: .running .focused .grouped .pinned
- *   .dock-taskbar-dots       row (column on side panels) of window dots
- *   .dock-taskbar-dot        one window dot
- *   .dock-taskbar-separator  line between pinned and unpinned apps
- *   .dock-taskbar-audio      speaker badge on an icon whose app plays sound (.muted)
- * Classes set by _preview.py (thumbnail popover):
- *   .dock-preview .dock-preview-card (.focused) .dock-preview-title
- *   .dock-preview-close .dock-preview-picture .dock-preview-placeholder
- */
+/* Dock Taskbar - Dark glass GNOME dash look (balanced transparency) */
 
 /* ---------- the bar ---------- */
 
 .dock-taskbar {
-  padding: 4px 8px;
-  border-radius: 18px;
-  background-color: rgba(0, 0, 0, 0.35);
+  padding: 5px 9px;
+  border-radius: 20px;
+
+  background-image: none;
+  background-color: rgba(12, 12, 14, 0.88);
   background-color: color-mix(
     in srgb,
-    var(--primary-bg, #1e1e1e) 78%,
+    color-mix(in srgb, var(--primary-bg, #121214) 65%, #070709 35%) 88%,
     transparent
   );
-  border: 1px solid rgba(255, 255, 255, 0.06);
+
+  border: 1px solid rgba(255, 255, 255, 0.13);
   border: 1px solid
-    color-mix(in srgb, var(--main-text, #ffffff) 8%, transparent);
+    color-mix(in srgb, var(--main-text, #ffffff) 14%, transparent);
+
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.48),
+    0 2px 6px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 /* ---------- app buttons ---------- */
 
 .dock-taskbar-button {
-  padding: 5px 7px 3px 7px;
+  padding: 5px 7px 4px 7px;
   margin: 0;
   min-width: 0;
   min-height: 0;
-  border: none;
+
+  border: 1px solid transparent;
   border-radius: 14px;
+
   background: transparent;
   box-shadow: none;
-  transition: background-color 120ms ease-out;
+
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .dock-taskbar-button:hover {
-  background-color: rgba(255, 255, 255, 0.12);
+  background-color: rgba(255, 255, 255, 0.11);
   background-color: color-mix(
     in srgb,
     var(--main-text, #ffffff) 12%,
     transparent
   );
+
+  border-color: rgba(255, 255, 255, 0.09);
 }
 
 .dock-taskbar-button:active {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0.18);
   background-color: color-mix(
     in srgb,
-    var(--main-text, #ffffff) 20%,
+    var(--main-text, #ffffff) 19%,
     transparent
   );
 }
 
-/* The app that owns the focused window keeps a soft tile behind it. */
+/* Focused application */
+
 .dock-taskbar-button.focused {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.14);
   background-color: color-mix(
     in srgb,
-    var(--main-text, #ffffff) 10%,
+    var(--main-text, #ffffff) 15%,
     transparent
   );
+
+  border-color: rgba(255, 255, 255, 0.13);
+  border-color: color-mix(in srgb, var(--main-text, #ffffff) 14%, transparent);
+
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.06),
+    0 1px 3px rgba(0, 0, 0, 0.28);
 }
 
 .dock-taskbar-button.focused:hover {
-  background-color: rgba(255, 255, 255, 0.17);
+  background-color: rgba(255, 255, 255, 0.2);
   background-color: color-mix(
     in srgb,
-    var(--main-text, #ffffff) 17%,
+    var(--main-text, #ffffff) 21%,
     transparent
   );
 }
@@ -93,9 +96,10 @@
   outline-offset: -2px;
 }
 
-/* Pinned launchers that are not running look slightly quieter. */
+/* Pinned launchers that are not running */
+
 .dock-taskbar-button.pinned:not(.running) image {
-  opacity: 0.85;
+  opacity: 0.88;
 }
 
 /* ---------- window dots ---------- */
@@ -109,16 +113,17 @@
   min-width: 5px;
   min-height: 5px;
   border-radius: 50%;
-  background-color: rgba(255, 255, 255, 0.6);
+
+  background-color: rgba(255, 255, 255, 0.78);
   background-color: color-mix(
     in srgb,
-    var(--main-text, #ffffff) 60%,
+    var(--main-text, #ffffff) 78%,
     transparent
   );
-  transition: background-color 120ms ease-out;
+
+  transition: background-color 150ms ease;
 }
 
-/* Focused app: accent coloured dots. */
 .dock-taskbar-button.focused .dock-taskbar-dot {
   background-color: var(--theme-status-accent, #3584e4);
 }
@@ -128,81 +133,110 @@
 .dock-taskbar-separator {
   min-width: 1px;
   min-height: 1px;
-  margin: 8px 4px;
-  background-color: rgba(255, 255, 255, 0.22);
+  margin: 8px 5px;
+
+  background-color: rgba(255, 255, 255, 0.24);
   background-color: color-mix(
     in srgb,
-    var(--main-text, #ffffff) 22%,
+    var(--main-text, #ffffff) 25%,
     transparent
   );
 }
 
 /* ---------- audio badge ---------- */
 
-/* The speaker badge has a built-in style (disc + ring), so it stays readable on
- * light icons without this file. To restyle it, use a more specific selector
- * than the built-in one, for example:
- *
- *   .dock-taskbar-button .dock-taskbar-audio { background-color: #26a269; }
- *   .dock-taskbar-button .dock-taskbar-audio.muted { background-color: #5e5c64; }
- */
+.dock-taskbar-button .dock-taskbar-audio {
+  background-color: #26a269;
+}
+
+.dock-taskbar-button .dock-taskbar-audio.muted {
+  background-color: #77767b;
+}
 
 /* ---------- thumbnails popover ---------- */
 
 popover.dock-preview > contents {
-  padding: 8px;
-  border-radius: 16px;
-  background-color: var(--primary-bg, #1e1e1e);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 9px;
+  border-radius: 17px;
+
+  background-image: none;
+  background-color: rgba(14, 14, 16, 0.92);
+  background-color: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--primary-bg, #141416) 65%, #070709 35%) 92%,
+    transparent
+  );
+
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border: 1px solid
-    color-mix(in srgb, var(--main-text, #ffffff) 10%, transparent);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+    color-mix(in srgb, var(--main-text, #ffffff) 15%, transparent);
+
+  box-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.6),
+    0 2px 8px rgba(0, 0, 0, 0.42);
 }
 
+/* Preview cards */
+
 .dock-preview-card {
-  padding: 6px;
-  border-radius: 12px;
+  padding: 7px;
+  border-radius: 13px;
+
   background-color: transparent;
   border: 2px solid transparent;
-  transition: background-color 120ms ease-out;
+
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease;
 }
 
 .dock-preview-card:hover {
   background-color: rgba(255, 255, 255, 0.1);
   background-color: color-mix(
     in srgb,
-    var(--main-text, #ffffff) 10%,
+    var(--main-text, #ffffff) 11%,
     transparent
   );
 }
 
 .dock-preview-card.focused {
   border-color: var(--theme-status-accent, #3584e4);
-}
 
-.dock-preview-title {
-  font-size: 0.9em;
-  margin-bottom: 4px;
-}
-
-.dock-preview-picture {
-  border-radius: 8px;
-}
-
-.dock-preview-placeholder {
-  border-radius: 8px;
-  background-color: rgba(255, 255, 255, 0.06);
+  background-color: rgba(255, 255, 255, 0.09);
   background-color: color-mix(
     in srgb,
-    var(--main-text, #ffffff) 6%,
+    var(--main-text, #ffffff) 9%,
     transparent
   );
 }
 
+.dock-preview-title {
+  font-size: 0.9em;
+  margin-bottom: 5px;
+}
+
+.dock-preview-picture {
+  border-radius: 9px;
+}
+
+.dock-preview-placeholder {
+  border-radius: 9px;
+
+  background-color: rgba(255, 255, 255, 0.08);
+  background-color: color-mix(
+    in srgb,
+    var(--main-text, #ffffff) 9%,
+    transparent
+  );
+}
+
+/* Close button */
+
 .dock-preview-close {
-  min-width: 20px;
-  min-height: 20px;
+  min-width: 22px;
+  min-height: 22px;
   padding: 0;
+
   border-radius: 50%;
   background: transparent;
   box-shadow: none;

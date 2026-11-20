@@ -26,6 +26,40 @@ def get_plugin_class():
             self._setup_panel_boxes()
             self.add_css_class()
             self.plugins["css_generator"].install_css("bottom-panel.css")
+            # Plugins fill the side boxes while they load, so look again a bit later.
+            self.glib.timeout_add(1000, self._sync_side_boxes)
+            self.glib.timeout_add(4000, self._sync_side_boxes)
+
+        def _has_content(self, widget, placeholders):
+            """True when ``widget`` holds something besides the empty placeholder boxes."""
+            child = widget.get_first_child()
+            while child is not None:
+                if child not in placeholders or self._has_content(child, placeholders):
+                    return True
+                child = child.get_next_sibling()
+            return False
+
+        def _sync_side_boxes(self):
+            """Hide the left and right boxes while nothing is in them.
+
+            With a panel width of -1 the window is as wide as its content, so an
+            empty side box (its spacer, padding and margin) only widens the window,
+            and the blur behind it, beyond the dock.
+            """
+            placeholders = {
+                self.spacer,
+                self.obj.bottom_panel_box_widgets_left,
+                self.obj.bottom_panel_box_systray,
+                self.obj.bottom_panel_box_for_buttons,
+                self.obj.bottom_panel_box_right,
+            }
+            self.obj.bottom_panel_box_left.set_visible(
+                self._has_content(self.obj.bottom_panel_box_left, placeholders)
+            )
+            self.obj.bottom_panel_grid_right.set_visible(
+                self._has_content(self.obj.bottom_panel_grid_right, placeholders)
+            )
+            return False
 
         def _attach_widget_to_grid_next_to(
             self, grid, widget_to_attach, relative_widget, position_type, width, height
@@ -130,6 +164,8 @@ def get_plugin_class():
             self.obj.bottom_panel_scrolled_window.set_policy(
                 self.gtk.PolicyType.AUTOMATIC, self.gtk.PolicyType.NEVER
             )
+            # The window is as wide as its content when the panel width is -1.
+            self.obj.bottom_panel_scrolled_window.set_propagate_natural_width(True)
             self.obj.bottom_panel_scrolled_window.set_child(
                 self.obj.bottom_panel_box_full
             )

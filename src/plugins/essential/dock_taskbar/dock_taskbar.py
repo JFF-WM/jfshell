@@ -271,7 +271,9 @@ def get_plugin_class():
             self.refresh_audio()
             open_key = self.preview.key
             if open_key in self.entry_map:
-                self.preview.refresh_if_changed(open_key, self.entry_map[open_key].views)
+                self.preview.refresh_if_changed(
+                    open_key, self.entry_map[open_key].views
+                )
 
         # --- facts about an entry ---
 
@@ -354,7 +356,9 @@ def get_plugin_class():
             if entry is None or len(entry.views) < 2:
                 return False
             views = entry.views
-            current = next((i for i, v in enumerate(views) if v.get("is_focused")), None)
+            current = next(
+                (i for i, v in enumerate(views) if v.get("is_focused")), None
+            )
             if current is None:
                 target = views[0] if direction > 0 else views[-1]
             else:
