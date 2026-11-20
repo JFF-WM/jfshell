@@ -7,9 +7,9 @@ def get_plugin_metadata(_):
         "name": "Media Player",
         "version": "3.5.2",
         "index": 20,
-        "description": "Dedicated media control button with marquee, pulse effects, window focus, and close action.",
+        "description": "Media control page in the clock popover with marquee, pulse effects, window focus, and close action.",
         "container": "background",
-        "deps": ["css_generator", "top_panel"],
+        "deps": ["css_generator", "calendar"],
         "enabled": True,
     }
 
@@ -28,6 +28,8 @@ def get_plugin_class():
     from src.shared.dbus_helpers import DbusHelpers
     from dbus_fast.aio import MessageBus
     from dbus_fast import BusType
+
+    PAGE_ID = "now_playing"
 
     class PlayerRow(Gtk.Box):
         """
@@ -312,10 +314,52 @@ def get_plugin_class():
                 None,
                 False,
             )
+            self.calendar = None
+            self.max_height = int(
+                self.get_plugin_setting_add_hint(
+                    ["max_height"],
+                    320,
+                    "Height in pixels the media page grows to before it scrolls.",
+                )
+            )
             self.popover_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
             self.popover_box.add_css_class("player-popover-content")
+            self.init_page()
             self.run_in_async_task(self._init_dbus())
             self.plugins["css_generator"].install_css("main.css")
+
+        def init_page(self) -> None:
+            """
+            Builds the page and adds it to the clock popover's sidebar. Its
+            sidebar button stays hidden until a player is active.
+            """
+            if "calendar" not in self.plugins:
+                self.logger.error(
+                    "Calendar plugin is not loaded. Cannot add Media Player page."
+                )
+                return
+            self.calendar = self.plugins["calendar"]
+            scrolled = Gtk.ScrolledWindow()
+            scrolled.add_css_class("player-popover")
+            scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            scrolled.set_propagate_natural_height(True)
+            scrolled.set_propagate_natural_width(True)
+            scrolled.set_max_content_height(self.max_height)
+            scrolled.set_child(self.popover_box)
+            actual_icon = self.icon_exist(
+                "media-playback-playing-symbolic",
+                ["media-playback-playing-symbolic"],
+            )
+            added = self.calendar.add_page(
+                PAGE_ID,
+                [actual_icon, "multimedia-player-symbolic"],
+                "Media Player",
+                scrolled,
+            )
+            if added:
+                self.main_button = self.calendar.pages[PAGE_ID]["button"]
+                self.main_button.add_css_class("player-trigger")
+                self.main_button.set_visible(False)
 
         async def _init_dbus(self):
             """
@@ -377,69 +421,35 @@ def get_plugin_class():
                     self.popover_box.remove(row)
                 gc.collect()
 
-        def _sync_panel(self):
+        def _sync_panel(self) -> None:
             """
-            Manages the visibility and attachment of the trigger button in the panel.
+            Shows the page's sidebar button while a player is active and hides
+            it when there is none, returning to the calendar if it was open.
             """
-            container = self.plugins["status_notifier"].tray_box
-
-            if self.active_rows and not self._added:
-                self.main_button = self.gtk.Button()
-                self.add_cursor_effect(self.main_button)
-                self.main_button.add_css_class("player-trigger")
-                self.main_widget = (self.main_button, None)
-
-                self.main_button.set_valign(self.gtk.Align.CENTER)
-                self.main_button.set_halign(self.gtk.Align.CENTER)
-                self.main_button.set_vexpand(False)
-                icon_name = self.icon_exist(
-                    "media-playback-playing-symbolic",
-                    ["media-playback-playing-symbolic"],
-                )
-                self.main_button.set_icon_name(icon_name)
-
-                pop, scr, _ = self.create_popover(
-                    parent_widget=self.main_button,
-                    css_class="player-popover",
-                    use_scrolled=True,
-                    max_height=500,
-                )
-
-                current_parent = self.popover_box.get_parent()
-                if current_parent:
-                    if hasattr(current_parent, "set_child"):
-                        current_parent.set_child(None)
-                    elif hasattr(current_parent, "remove"):
-                        current_parent.remove(self.popover_box)
-
-                scr.set_child(self.popover_box)
-                self.main_button.connect("clicked", lambda _: pop.popup())
-
-                container.append(self.main_button)
-                self._added = True
-
-            elif not self.active_rows and self._added:
-                current_parent = self.popover_box.get_parent()
-                if current_parent and hasattr(current_parent, "set_child"):
-                    current_parent.set_child(None)
-
-                if self.main_button and self.main_button.get_parent() == container:
-                    container.remove(self.main_button)
-
-                self.main_button = None
-                self._added = False
+            if self.main_button is None:
+                return
+            has_players = bool(self.active_rows)
+            if has_players == self._added:
+                return
+            self._added = has_players
+            self.main_button.set_visible(has_players)
+            if not has_players:
+                if self.calendar and self.calendar.current_page == PAGE_ID:
+                    self.calendar.show_page(self.calendar.CALENDAR_PAGE)
                 gc.collect()
 
         def on_disable(self):
             """
             Cleans up active timers and UI elements when the plugin is stopped.
             """
-            if self.main_button and self._added:
-                self._sync_panel()
             for r in self.active_rows.values():
                 if r._scroll_timer:
                     GLib.source_remove(r._scroll_timer)
             self.active_rows.clear()
+            if self.calendar:
+                self.calendar.remove_page(PAGE_ID)
+            self.main_button = None
+            self._added = False
             gc.collect()
 
     return MediaPlugin
