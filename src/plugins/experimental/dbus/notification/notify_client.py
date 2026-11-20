@@ -1,17 +1,15 @@
 def get_plugin_metadata(_):
     about = (
-        "This plugin provides a graphical user interface (GUI) on a panel"
-        "for viewing and managing recent desktop notificationons, acting as"
-        "a client to the D-Bus notification server plugin."
+        "This plugin provides a page in the clock popover for viewing and "
+        "managing recent desktop notifications, acting as a client to the "
+        "D-Bus notification server plugin."
     )
     return {
         "id": "org.jfshell.plugin.notify_client",
         "name": "Notify Client",
         "version": "1.0.0",
         "enabled": True,
-        "index": 1,
-        "container": "top-panel-center",
-        "deps": ["notify_server", "css_generator", "status_notifier"],
+        "deps": ["notify_server", "css_generator", "calendar"],
         "description": about,
     }
 
@@ -21,6 +19,8 @@ def get_plugin_class():
     from ._utils import NotifyUtils
     from ._activate import activate_notification
     from src.plugins.core._base import BasePlugin
+
+    PAGE_ID = "notifications"
 
     class NotificationPopoverPlugin(BasePlugin):
         def __init__(self, panel_instance):
@@ -38,10 +38,7 @@ def get_plugin_class():
             """
             self.notify_utils = NotifyUtils(self.obj)
             self.notification_server = self.plugins["notify_server"]
-            self.vbox = self.gtk.Box.new(self.gtk.Orientation.VERTICAL, 5)
-            self.vbox.set_margin_top(10)
-            self.vbox.set_margin_bottom(10)
-            self.vbox.set_margin_start(10)
+            self.vbox = None
             self.show_messages = None
             self.cached_notifications = []
 
@@ -61,19 +58,24 @@ def get_plugin_class():
                 10,
                 "The timeout (in seconds) before a new notification disappears (server-side setting).",
             )
-            self.popover_max_height = self.get_plugin_setting_add_hint(
-                ["popover_max_height"],
-                600,
-                "The default height of the notification popover (in pixels).",
+            self.list_width = self.get_plugin_setting_add_hint(
+                ["list_width"],
+                300,
+                "Fixed width (in pixels) of the notification list in the clock popover; long text wraps.",
+            )
+            self.list_height = self.get_plugin_setting_add_hint(
+                ["list_height"],
+                270,
+                "Fixed height (in pixels) of the notification list in the clock popover, about 3 notifications; the rest scroll.",
             )
             self.body_max_width_chars = self.get_plugin_setting_add_hint(
                 ["body_max_width_chars"],
-                50,
+                30,
                 "The maximum character width for the notification body text before it wraps in the popover.",
             )
             self.notification_icon_size = self.get_plugin_setting_add_hint(
                 ["notification_icon_size"],
-                64,
+                40,
                 "The size (in pixels) for the application icon displayed in a notification box.",
             )
             self.show_messages = self.get_plugin_setting_add_hint(
@@ -81,29 +83,19 @@ def get_plugin_class():
                 True,
                 "If True, the server shows messages; False enables Do Not Disturb mode (server-side setting).",
             )
-            self.vbox.set_margin_end(10)
             self.notification_on_popover = {}
-            self.notification_button = self.gtk.Button.new_from_icon_name(
-                self.gtk_helper.icon_exist(
-                    "notifications-applet-symbolic",
-                    [
-                        "notifications-applet-symbolic",
-                        "org.gnome.Settings-notifications-symbolic",
-                    ],
-                )
-            )
-            self.main_widget = (self.notification_button, "append")
-            self.notification_button.add_css_class("notification-panel-button")
-            self.notification_button.set_tooltip_text("View Recent Notifications")
-            self.notification_button.connect("clicked", self.open_popover_notifications)
-            self.plugins["status_notifier"].tray_box.append(self.notification_button)
-            self.gtk_helper.add_cursor_effect(self.notification_button)
+            # Sidebar button of the page in the clock popover (set by init_page).
+            # notify_watcher shows and hides it.
+            self.notification_button = None
+            self.calendar = None
+            self.page_root = None
             self.dnd_switch = self.gtk.Switch()
             self.dnd_switch.set_active(False)
             self.dnd_switch.connect("state-set", self.on_dnd_toggled)
             self.db_path = self.path_handler.get_data_path("db/notify/notifications.db")
             self.run_in_thread(self._preload_notifications)
             self.plugins["css_generator"].install_css("notify.css")
+            self.init_page()
 
         def _preload_notifications(self):
             """Internal method to populate the cache in a background thread."""
@@ -211,8 +203,7 @@ def get_plugin_class():
                 uri: The URI string to open.
             """
             self.cmd.open_url(uri)
-            if hasattr(self, "popover") and self.popover:
-                self.popover.popdown()
+            self._close_popover()
             self.logger.info(f"Launching URI: {uri}")
             return True
 
@@ -244,8 +235,7 @@ def get_plugin_class():
                 )
             except Exception as e:
                 self.logger.error(f"Failed to open notification: {e}")
-            if hasattr(self, "popover") and self.popover:
-                self.popover.popdown()
+            self._close_popover()
 
         def handle_default_action(self, notification):
             """
@@ -269,8 +259,7 @@ def get_plugin_class():
                 if action.startswith("app://"):
                     app_id = action.split("://")[1]
                     self.cmd.run(app_id)
-                    if hasattr(self, "popover") and self.popover:
-                        self.popover.popdown()
+                    self._close_popover()
             except Exception as e:
                 self.logger.error(f"Error executing default action '{action}': {e}")
 
@@ -321,14 +310,20 @@ def get_plugin_class():
             app_label.set_use_markup(True)
             app_label.add_css_class("notify-client-app-label")
             app_label.set_halign(self.gtk.Align.START)
+            app_label.set_ellipsize(self.pango.EllipsizeMode.END)
+            app_label.set_max_width_chars(12)
             self.update_widget_safely(left_box.append, app_label)
             summary_label = self.gtk.Label(label=notification["summary"])
             summary_label.set_wrap(True)
+            summary_label.set_wrap_mode(self.pango.WrapMode.WORD_CHAR)
+            summary_label.set_xalign(0)
             summary_label.set_halign(self.gtk.Align.START)
             summary_label.add_css_class("notify-client-heading")
             self.update_widget_safely(right_box.append, summary_label)
             body_label = self.gtk.Label(label=notification["body"])
             body_label.set_wrap(True)
+            body_label.set_wrap_mode(self.pango.WrapMode.WORD_CHAR)
+            body_label.set_xalign(0)
             body_label.set_max_width_chars(self.body_max_width_chars)
             body_label.set_halign(self.gtk.Align.START)
             self.update_widget_safely(right_box.append, body_label)
@@ -416,77 +411,99 @@ def get_plugin_class():
             except Exception as e:
                 self.logger.error(f"Error deleting notification {notification_id}: {e}")
 
-        def open_popover_notifications(self, *_) -> None:
-            """Creates or updates the notification popover using cached data."""
-            if not hasattr(self, "popover") or not self.popover:
-                self.popover = self.gtk.Popover.new()
-                self.popover.add_css_class("notify-popover")
-                self.main_vbox = self.gtk.Box.new(self.gtk.Orientation.VERTICAL, 5)
-                self.main_vbox.set_margin_top(10)
-                self.main_vbox.set_margin_bottom(10)
-                self.main_vbox.set_margin_start(10)
-                self.main_vbox.set_margin_end(10)
-
-                # Notifications Scrolled Area
-                self.vbox = self.gtk.Box.new(self.gtk.Orientation.VERTICAL, 8)
-                self.vbox.add_css_class("notify-client-list")
-                self.vbox.set_vexpand(True)
-
-                scrolled_window = self.gtk.ScrolledWindow()
-                scrolled_window.set_child(self.vbox)
-
-                # Enable natural height AND width propagation
-                scrolled_window.set_propagate_natural_height(True)
-                scrolled_window.set_propagate_natural_width(True)
-
-                scrolled_window.set_min_content_height(100)
-                scrolled_window.set_max_content_height(self.popover_max_height)
-
-                # Ensure the popover has a reasonable minimum width so it doesn't look cramped
-                scrolled_window.set_min_content_width(300)
-
-                scrolled_window.set_policy(
-                    self.gtk.PolicyType.NEVER,
-                    self.gtk.PolicyType.AUTOMATIC,
+        def init_page(self) -> None:
+            """Build the page and add it to the clock popover's sidebar."""
+            if "calendar" not in self.plugins:
+                self.logger.error(
+                    "Calendar plugin is not loaded. Cannot add Notifications page."
                 )
-                self.update_widget_safely(self.main_vbox.append, scrolled_window)
+                return
+            self.calendar = self.plugins["calendar"]
+            self.build_page()
+            actual_icon = self.gtk_helper.icon_exist(
+                "notifications-applet-symbolic",
+                [
+                    "notifications-applet-symbolic",
+                    "org.gnome.Settings-notifications-symbolic",
+                ],
+            )
+            added = self.calendar.add_page(
+                PAGE_ID,
+                [actual_icon, "preferences-system-notifications-symbolic"],
+                "Notifications",
+                self.page_root,
+                on_show=self.on_page_show,
+            )
+            if added:
+                self.notification_button = self.calendar.pages[PAGE_ID]["button"]
+                self.notification_button.add_css_class("notification-panel-button")
 
-                # Bottom Controls Row
-                bottom_box = self.gtk.Box.new(self.gtk.Orientation.HORIZONTAL, 10)
-                bottom_box.set_margin_top(10)
-                bottom_box.add_css_class("notify-bottom-box")
+        def build_page(self) -> None:
+            """Creates the widgets of the notifications page (list and controls)."""
+            self.page_root = self.gtk.Box.new(self.gtk.Orientation.VERTICAL, 5)
+            self.page_root.add_css_class("notify-popover")
+            self.page_root.set_margin_top(6)
+            self.page_root.set_margin_bottom(6)
+            self.page_root.set_margin_start(10)
+            self.page_root.set_margin_end(10)
 
-                # Unified DND Toggle Button (Left)
-                dnd_label = (
-                    "Show Notifications"
-                    if getattr(self, "dnd_enabled", False)
-                    else "Do Not Disturb"
-                )
-                self.dnd_toggle_btn = self.gtk.Button(label=dnd_label)
-                self.dnd_toggle_btn.add_css_class("notify-dnd-button")
-                self.dnd_toggle_btn.connect("clicked", self.on_dnd_button_clicked)
-                self.gtk_helper.add_cursor_effect(self.dnd_toggle_btn)
+            # Notifications Scrolled Area
+            self.vbox = self.gtk.Box.new(self.gtk.Orientation.VERTICAL, 8)
+            self.vbox.add_css_class("notify-client-list")
+            self.vbox.set_vexpand(True)
 
-                # Clear All Button (Right)
-                clear_button = self.gtk.Button(label="Clear All")
-                clear_button.set_halign(self.gtk.Align.END)
-                clear_button.set_hexpand(True)
-                clear_button.connect(
-                    "clicked", lambda _: self.clear_all_notifications()
-                )
-                clear_button.set_tooltip_text("Clear All Notifications")
-                clear_button.add_css_class("notify-clear-button")
-                self.gtk_helper.add_cursor_effect(clear_button)
+            scrolled_window = self.gtk.ScrolledWindow()
+            scrolled_window.set_child(self.vbox)
+            scrolled_window.set_overlay_scrolling(False)
 
-                self.update_widget_safely(bottom_box.append, self.dnd_toggle_btn)
-                self.update_widget_safely(bottom_box.append, clear_button)
-                self.update_widget_safely(self.main_vbox.append, bottom_box)
+            # Enable natural height AND width propagation
+            scrolled_window.set_propagate_natural_height(True)
+            scrolled_window.set_propagate_natural_width(False)
 
-                self.popover.set_child(self.main_vbox)
+            scrolled_window.set_min_content_height(int(self.list_height))
+            scrolled_window.set_max_content_height(int(self.list_height))
 
-            if self.popover.get_parent():
-                self.popover.unparent()
+            # Fixed width: long text wraps instead of widening the popover
+            scrolled_window.set_min_content_width(int(self.list_width))
+            scrolled_window.set_max_content_width(int(self.list_width))
 
+            scrolled_window.set_policy(
+                self.gtk.PolicyType.NEVER,
+                self.gtk.PolicyType.AUTOMATIC,
+            )
+            self.update_widget_safely(self.page_root.append, scrolled_window)
+
+            # Bottom Controls Row
+            bottom_box = self.gtk.Box.new(self.gtk.Orientation.HORIZONTAL, 10)
+            bottom_box.set_margin_top(4)
+            bottom_box.add_css_class("notify-bottom-box")
+
+            # Unified DND Toggle Button (Left)
+            dnd_label = (
+                "Show Notifications"
+                if getattr(self, "dnd_enabled", False)
+                else "Do Not Disturb"
+            )
+            self.dnd_toggle_btn = self.gtk.Button(label=dnd_label)
+            self.dnd_toggle_btn.add_css_class("notify-dnd-button")
+            self.dnd_toggle_btn.connect("clicked", self.on_dnd_button_clicked)
+            self.gtk_helper.add_cursor_effect(self.dnd_toggle_btn)
+
+            # Clear All Button (Right)
+            clear_button = self.gtk.Button(label="Clear All")
+            clear_button.set_halign(self.gtk.Align.END)
+            clear_button.set_hexpand(True)
+            clear_button.connect("clicked", lambda _: self.clear_all_notifications())
+            clear_button.set_tooltip_text("Clear All Notifications")
+            clear_button.add_css_class("notify-clear-button")
+            self.gtk_helper.add_cursor_effect(clear_button)
+
+            self.update_widget_safely(bottom_box.append, self.dnd_toggle_btn)
+            self.update_widget_safely(bottom_box.append, clear_button)
+            self.update_widget_safely(self.page_root.append, bottom_box)
+
+        def on_page_show(self) -> None:
+            """The page became visible: refresh the list from the cache."""
             # Clear existing widgets
             child = self.vbox.get_first_child()
             while child:
@@ -511,10 +528,19 @@ def get_plugin_class():
                 for notification in notifications:
                     self.create_notification_box(notification)
 
-            # Anchor and Show
-            self.popover.set_parent(self.notification_button)
-            self.popover.popup()
             self.run_in_thread(self._preload_notifications)
+
+        def _close_popover(self) -> None:
+            """Close the clock popover that hosts the notifications page."""
+            popover = getattr(self.calendar, "popover_calendar", None)
+            if popover:
+                popover.popdown()
+
+        def on_disable(self) -> None:
+            """Take the page out of the clock popover."""
+            if self.calendar:
+                self.calendar.remove_page(PAGE_ID)
+                self.notification_button = None
 
         def on_dnd_button_clicked(self, button) -> None:
             """Toggles DND state and updates the button label."""
