@@ -145,13 +145,17 @@ class AppMenuHandler:
             "id": name,
             "cmd": f"gtk-launch {desktop_file.split('.desktop')[0]}",
             "icon": wclass,
+            "app_id": wclass,
             "wclass": wclass,
             "desktop_file": desktop_file,
             "name": name,
             "initial_title": name,
         }
         config = self.plugin.get_root_setting([self.plugin.dockbar_id], {})
-        apps = config.get("app", [])
+        apps = config.get("app")
+        if apps is None:
+            # First pin: keep the launchers the old dockbar had.
+            apps = self.plugin.get_root_setting(["org.jfshell.plugin.dockbar", "app"], [])
 
         if isinstance(apps, dict):
             apps = list(apps.values())
@@ -164,13 +168,16 @@ class AppMenuHandler:
     def remove_from_dockbar(self, button, desktop_file, popover):
         """Removes an application from the dockbar settings."""
         config = self.plugin.get_root_setting([self.plugin.dockbar_id], {})
-        apps = config.get("app", {})
-        key = next(
-            (k for k, v in apps.items() if v.get("desktop_file") == desktop_file), None
-        )
-        if key:
-            del apps[key]
-            config["app"] = apps
+        apps = config.get("app", [])
+        if isinstance(apps, dict):
+            apps = list(apps.values())
+        remaining = [
+            v
+            for v in apps
+            if not (isinstance(v, dict) and v.get("desktop_file") == desktop_file)
+        ]
+        if len(remaining) != len(apps):
+            config["app"] = remaining
             self.plugin.config_handler.set_root_setting(
                 [self.plugin.dockbar_id], config
             )

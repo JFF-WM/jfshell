@@ -67,6 +67,52 @@ class DockTaskbarUI:
         p.dock.set_valign(Gtk.Align.CENTER)
         self._install_badge_css()
 
+    def attach_launcher(self):
+        """Pins the app launcher button as the first, fixed item of the bar.
+
+        The button gets the same layout as the app buttons (icon plus the dots
+        row), so its icon lines up with the others.
+        """
+        from gi.repository import Gtk
+
+        p = self.plugin
+        p.launcher_button = None
+        if "app_launcher" not in p.plugins:
+            return
+        button = p.plugins["app_launcher"].appmenu
+        icon_name = button.get_icon_name() or "start-here"
+        image = Gtk.Image.new_from_icon_name(icon_name)
+        image.set_pixel_size(self.config.icon_size)
+        dots = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL
+            if p.vertical
+            else Gtk.Orientation.HORIZONTAL,
+            spacing=3,
+        )
+        dots.add_css_class("dock-taskbar-dots")
+        dots.set_halign(Gtk.Align.CENTER)
+        dots.set_valign(Gtk.Align.CENTER)
+        inner = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL
+            if p.vertical
+            else Gtk.Orientation.VERTICAL,
+            spacing=2,
+        )
+        if p.position in ("bottom", "right"):
+            inner.append(image)
+            inner.append(dots)
+        else:
+            inner.append(dots)
+            inner.append(image)
+        button.set_child(inner)
+        button.add_css_class("dock-taskbar-button")
+        button.set_halign(Gtk.Align.CENTER)
+        button.set_valign(Gtk.Align.CENTER)
+        button.set_hexpand(False)
+        button.set_vexpand(False)
+        p.dock.append(button)
+        p.launcher_button = button
+
     def _install_badge_css(self):
         """Registers the built-in badge style once for the whole display."""
         from gi.repository import Gdk, Gtk
@@ -264,10 +310,12 @@ class DockTaskbarUI:
         current = []
         child = p.dock.get_first_child()
         while child is not None:
-            current.append(child)
+            if child is not p.launcher_button:
+                current.append(child)
             child = child.get_next_sibling()
         if current != desired:
-            previous = None
+            # The launcher button stays first.
+            previous = p.launcher_button
             for widget in desired:
                 p.dock.reorder_child_after(widget, previous)
                 previous = widget

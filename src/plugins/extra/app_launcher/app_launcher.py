@@ -3,9 +3,7 @@ def get_plugin_metadata(panel):
     Returns the metadata for the App Launcher plugin.
     """
     about = "A dynamic application launcher with a search bar and a grid view of installed and recently used applications."
-    default_container = "top-panel-left"
     id = "org.jfshell.plugin.app_launcher"
-    CONTAINER, id = panel.config_handler.get_plugin_container(default_container, id)
     return {
         "id": id,
         "name": "App Launcher",
@@ -13,7 +11,8 @@ def get_plugin_metadata(panel):
         "enabled": True,
         "index": 1,
         "priority": 987,
-        "container": CONTAINER,
+        # Not user-placeable: the dock_taskbar plugin embeds the button.
+        "container": "background",
         "deps": ["css_generator"],
         "description": about,
     }
@@ -51,7 +50,12 @@ def get_plugin_class():
 
         def on_start(self):
             """Triggered when the plugin starts. Initializes UI and database."""
-            self.container = get_plugin_metadata(self.obj)["container"]
+            self.dock_side = str(
+                self.config_handler.get_root_setting(
+                    ["org.jfshell.plugin.dock_taskbar", "panel", "position"], "bottom"
+                )
+            ).lower()
+            self.container = f"{self.dock_side}-panel-center"
             self.panel_window = self.panel_for_container(self.container)
             # Popovers must open away from the panel edge they are attached to
             self.opens_upward = self.container.startswith("bottom")
@@ -224,7 +228,7 @@ def get_plugin_class():
                 time_handler=self.time,
             )
 
-            self.dockbar_id = "org.jfshell.plugin.dockbar"
+            self.dockbar_id = "org.jfshell.plugin.dock_taskbar"
             icon_name = self._gtk_helper.icon_exist(
                 self.main_icon, self.fallback_main_icons
             )
@@ -277,10 +281,17 @@ def get_plugin_class():
                 has_arrow=False,
                 closed_handler=self.popover_is_closed,
                 visible_handler=self.popover_is_open,
-                offset=(0, -5) if self.opens_upward else (0, 5),
+                offset={"left": (5, 0), "right": (-5, 0), "bottom": (0, -5)}.get(
+                    self.dock_side, (0, 5)
+                ),
             )
-            if self.opens_upward:
-                popover.set_position(self.gtk.PositionType.TOP)
+            side_position = {
+                "left": self.gtk.PositionType.RIGHT,
+                "right": self.gtk.PositionType.LEFT,
+                "bottom": self.gtk.PositionType.TOP,
+            }.get(self.dock_side)
+            if side_position is not None:
+                popover.set_position(side_position)
             show_searchbar_action = self.gio.SimpleAction.new("show_searchbar")
             show_searchbar_action.connect(
                 "activate", self.on_show_searchbar_action_actived

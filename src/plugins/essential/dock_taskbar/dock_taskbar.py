@@ -18,7 +18,7 @@ def get_plugin_metadata(panel_instance):
         "version": "1.0.0",
         "enabled": True,
         "container": containers.get(position, "bottom-panel-center"),
-        "deps": ["event_manager", "css_generator"],
+        "deps": ["event_manager", "css_generator", "app_launcher"],
         "description": (
             "Dock and taskbar in one: pinned launchers plus running apps, always "
             "grouped per application, with window thumbnails on hover."
@@ -93,6 +93,7 @@ def get_plugin_class():
             self.events = DockTaskbarEvents(self)
 
             self.ui.create_layout()
+            self.ui.attach_launcher()
             self.sync()
             self.main_widget = (self.dock, "append")
             self.events.subscribe()
