@@ -27,6 +27,7 @@ def get_plugin_class():
     from .events import TaskbarEvents
     from .views import TaskbarViews
     from .gestures import TaskbarGestures
+    from .preview import TaskbarPreview
     import re
 
     class TitleFormatter:
@@ -70,12 +71,14 @@ def get_plugin_class():
             self.menu_handler = TaskbarMenu(self)
             self.event_handler = TaskbarEvents(self)
             self.view_handler = TaskbarViews(self)
+            self.preview_handler = TaskbarPreview(self)
             self.gesture_handler = TaskbarGestures(self)
             self.ui_handler.create_main_layout()
             self.event_handler.subscribe()
             self.run_in_thread(self._initialize_button_pool, 15)
             self.main_widget = (self.scrolled_window, "append")
             self.plugins["css_generator"].install_css("taskbar.css")
+            self.plugins["css_generator"].install_css("taskbar_preview.css")
 
         def _init_settings_refs(self):
             """Syncs refs for compatibility."""
@@ -187,6 +190,7 @@ def get_plugin_class():
             self.gtk_helper.add_cursor_effect(button)
 
         def _on_primary_click(self, button, identifier):
+            self.preview_handler.hide()
             views = [
                 v for v in self.ipc.list_windows() if self.view_handler.is_valid_view(v)
             ]
@@ -332,6 +336,7 @@ def get_plugin_class():
             btn.label.set_visible(label_visible)
 
         def on_disable(self):
+            self.preview_handler.destroy()
             self.event_handler.stop_audio_watch()
 
         def on_view_focused(self, view: dict) -> None:

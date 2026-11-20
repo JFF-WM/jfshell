@@ -1,0 +1,23 @@
+/* Hover preview of a taskbar button. Override these in your theme. */
+popover.taskbar-preview > contents {
+  padding: 8px;
+  border-radius: 12px;
+}
+
+.taskbar-preview-card {
+  padding: 2px;
+}
+
+.taskbar-preview-card.clickable:hover {
+  background: alpha(currentColor, 0.12);
+  border-radius: 8px;
+}
+
+.taskbar-preview-picture {
+  border-radius: 6px;
+}
+
+.taskbar-preview-title {
+  font-size: 0.9em;
+  opacity: 0.85;
+}

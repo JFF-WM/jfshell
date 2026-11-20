@@ -324,6 +324,26 @@ class IPC:
         return self._window_to_jfshell(r["window"])
 
     @handle_ipc_error
+    def get_window_thumbnail(
+        self, window_id: int, max_width: int = 320, max_height: int = 200
+    ) -> Optional[Dict[str, Any]]:
+        """Ask jff for a small PNG of a window (``window-thumbnail``).
+
+        Returns ``{"path", "width", "height"}``, or None when jff has no such
+        command (an older jff) or cannot draw the window right now.
+        """
+        r = jff_msg(
+            f"window-thumbnail {int(window_id)} {int(max_width)} {int(max_height)}"
+        )
+        if not r.get("ok") or not r.get("path"):
+            return None
+        return {
+            "path": r["path"],
+            "width": int(r.get("width", 0)),
+            "height": int(r.get("height", 0)),
+        }
+
+    @handle_ipc_error
     def get_active_workspace_number(self) -> Optional[int]:
         r = jff_msg("workspaces")
         return r.get("workspace") if r.get("ok") else None

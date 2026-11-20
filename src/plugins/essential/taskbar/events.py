@@ -95,6 +95,7 @@ class TaskbarEvents:
         if ev == "overview-changed":
             is_open = msg.get("state", False)
             if is_open:
+                self.plugin.preview_handler.hide()
                 for btn in self.plugin.in_use_buttons.values():
                     btn.remove_css_class("focused")
 

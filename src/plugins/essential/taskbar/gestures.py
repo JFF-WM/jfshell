@@ -15,10 +15,7 @@ class TaskbarGestures:
 
         # Right Click Logic (Menu)
         rc = Gtk.GestureClick(button=3)
-        rc.connect(
-            "pressed",
-            lambda g, n, x, y: self.plugin.menu_handler.show(g.get_widget(), x, y),
-        )
+        rc.connect("pressed", self._on_right_click)
         button.add_controller(rc)
 
         # Middle Click Logic (Restore Last Focused)
@@ -36,8 +33,14 @@ class TaskbarGestures:
         sc.connect("scroll", self._on_scroll_cycle)
         button.add_controller(sc)
 
+    def _on_right_click(self, gesture, n_press, x, y):
+        """Opens the context menu (the hover preview would sit on top of it)."""
+        self.plugin.preview_handler.hide()
+        self.plugin.menu_handler.show(gesture.get_widget(), x, y)
+
     def _on_scroll_cycle(self, controller, dx, dy):
         """Detects scroll direction and triggers view cycling."""
+        self.plugin.preview_handler.hide()
         btn = controller.get_widget()
         # Find the identifier (app-id or window-id) for this button
         identifier = next(
@@ -61,8 +64,9 @@ class TaskbarGestures:
             self.plugin.view_handler.restore_group_focus(identifier)
 
     def _on_hover_enter(self, controller, x, y):
-        """Applies compositor focus effect on hover."""
+        """Applies compositor focus effect on hover and queues the preview."""
         btn = controller.get_widget()
+        self.plugin.preview_handler.on_enter(btn)
         view_id = getattr(btn, "view_id", None)
         if view_id:
             view = self.plugin.compositor_helper.is_view_valid(view_id)
@@ -70,8 +74,9 @@ class TaskbarGestures:
                 self.plugin.compositor_helper.view_focus_effect_selected(view, 0.9, True)
 
     def _on_hover_leave(self, controller):
-        """Removes compositor focus effect."""
+        """Removes compositor focus effect and lets the preview close."""
         btn = controller.get_widget()
+        self.plugin.preview_handler.on_leave(btn)
         view_id = getattr(btn, "view_id", None)
         if view_id:
             view = self.plugin.compositor_helper.is_view_valid(view_id)
