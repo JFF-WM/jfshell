@@ -22,10 +22,106 @@ def get_plugin_class():
             self._deferred_widgets_attached = False
             self.is_top_panel_ready = False
 
+        # The styles for the classes below (panel-fit, panel-fit-keep) live in
+        # top-panel.css.
+        # Vertical space left around a button inside the panel (px, total).
+        FIT_MARGIN = 6
+        FIT_DEFAULT_HEIGHT = 32
+
         def on_start(self):
+            self._fit_timer = None
             self._setup_panel_boxes()
             self.add_css_class()
             self.plugins["css_generator"].install_css("top-panel.css")
+            self._start_fit()
+
+        def on_disable(self):
+            if self._fit_timer:
+                self.glib.source_remove(self._fit_timer)
+                self._fit_timer = None
+
+        # ------------------------------------------------------------ design
+        def _start_fit(self) -> None:
+            self._fit_timer = self.glib.timeout_add(1000, self._fit_tick)
+            self.glib.idle_add(self._fit_tick)
+
+        def _fit_sizes(self) -> tuple[int, int]:
+            """(button, icon) sizes derived from the configured top panel height."""
+            try:
+                height = int(
+                    float(
+                        self._config_handler.get_root_setting(
+                            ["org.jfshell.panel", "top", "height"],
+                            self.FIT_DEFAULT_HEIGHT,
+                        )
+                    )
+                )
+            except (TypeError, ValueError):
+                height = self.FIT_DEFAULT_HEIGHT
+            button = max(height - self.FIT_MARGIN, 16)
+            icon = max(min(button - 8, 16), 12)
+            return button, icon
+
+        def _fit_tick(self):
+            """Re-applies the sizes: plugins add and replace widgets at any time."""
+            sizes = self._fit_sizes()
+            # Right side: flat square buttons. Left and center (launcher, clock):
+            # keep their own look, only cap icons and drop the forced min height.
+            for box in (
+                self.obj.top_panel_box_systray,
+                self.obj.top_panel_box_for_buttons,
+                self.obj.top_panel_box_right,
+            ):
+                self._fit_widget(box, sizes)
+            for box in (self.obj.top_panel_box_left, self.obj.top_panel_box_center):
+                self._fit_widget(box, sizes, keep_look=True)
+            return True
+
+        def _has_label(self, widget) -> bool:
+            child = widget.get_first_child()
+            while child is not None:
+                if isinstance(child, self.gtk.Popover):
+                    child = child.get_next_sibling()
+                    continue
+                if isinstance(child, self.gtk.Label) or self._has_label(child):
+                    return True
+                child = child.get_next_sibling()
+            return False
+
+        def _fit_widget(
+            self, widget, sizes: tuple[int, int], keep_look: bool = False
+        ) -> None:
+            gtk = self.gtk
+            if isinstance(widget, gtk.Popover):
+                return
+            button, icon = sizes
+            if keep_look and isinstance(widget, gtk.Box):
+                widget.add_css_class("panel-fit-keep")
+            if isinstance(widget, gtk.Image):
+                if keep_look:
+                    # Left and center icons keep the size their plugin gave them.
+                    return
+                if widget.get_storage_type() == gtk.ImageType.PAINTABLE:
+                    if widget.get_size_request() != (icon, icon):
+                        widget.set_size_request(icon, icon)
+                        widget.set_halign(gtk.Align.CENTER)
+                        widget.set_valign(gtk.Align.CENTER)
+                elif widget.get_pixel_size() != icon:
+                    widget.set_pixel_size(icon)
+                return
+            if isinstance(widget, (gtk.Button, gtk.MenuButton)):
+                widget.set_valign(gtk.Align.CENTER)
+                if keep_look:
+                    widget.add_css_class("panel-fit-keep")
+                else:
+                    width = -1 if self._has_label(widget) else button
+                    if widget.get_size_request() != (width, button):
+                        widget.set_size_request(width, button)
+                    widget.add_css_class("panel-fit")
+            child = widget.get_first_child()
+            while child is not None:
+                self._fit_widget(child, sizes, keep_look)
+                child = child.get_next_sibling()
 
         def _attach_widget_to_grid_next_to(
             self, grid, widget_to_attach, relative_widget, position_type, width, height
@@ -54,6 +150,13 @@ def get_plugin_class():
             self.obj.top_panel_box_systray = self.gtk.Box()
             self.obj.top_panel_box_for_buttons = self.gtk.Box()
             self.obj.top_panel_box_right = self.gtk.Box()
+            for box in (
+                self.obj.top_panel_box_systray,
+                self.obj.top_panel_box_for_buttons,
+                self.obj.top_panel_box_right,
+            ):
+                box.set_valign(self.gtk.Align.CENTER)
+                box.set_vexpand(False)
 
             self.spacer = self.gtk.Separator(
                 orientation=self.gtk.Orientation.HORIZONTAL
@@ -101,8 +204,10 @@ def get_plugin_class():
 
             # Scrolled Window Wrapper
             self.obj.top_panel_scrolled_window = self.gtk.ScrolledWindow()
+            # EXTERNAL (not NEVER) vertically: NEVER makes the window as tall as its
+            # tallest child, so no widget could let the panel go below its height.
             self.obj.top_panel_scrolled_window.set_policy(
-                self.gtk.PolicyType.AUTOMATIC, self.gtk.PolicyType.NEVER
+                self.gtk.PolicyType.AUTOMATIC, self.gtk.PolicyType.EXTERNAL
             )
             self.obj.top_panel_scrolled_window.set_child(self.obj.top_panel_box_full)
 

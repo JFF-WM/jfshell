@@ -53,3 +53,59 @@
 .right-box-spacer {
   background-color: transparent;
 }
+
+/* Fit classes. top_panel.py adds them to the widgets of each area and sets the
+   button size from the panel height, so no widget can keep the panel tall. */
+
+/* Right side (systray rectangle and buttons): flat square buttons. */
+button.panel-fit,
+menubutton.panel-fit > button {
+  min-height: 0;
+  min-width: 0;
+  padding: 0;
+  margin: 0 1px;
+  border: none;
+  box-shadow: none;
+  background: none;
+  border-radius: 6px;
+}
+
+button.panel-fit:hover,
+menubutton.panel-fit > button:hover {
+  background: var(--color-bg-button-hover);
+}
+
+/* Left and center (launcher, global menu, clock): keep their look, drop the
+   forced minimum size and any vertical margin/padding asymmetry so content
+   centers. The clock keeps its own padding. */
+button.panel-fit-keep,
+menubutton.panel-fit-keep > button {
+  min-height: 0;
+  min-width: 0;
+}
+
+button.panel-fit-keep:not(.clock-button),
+menubutton.panel-fit-keep > button {
+  padding-top: 5px;
+  padding-bottom: 1px;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+button.panel-fit-keep:not(.clock-button) > label {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+menubutton.panel-fit-keep,
+box.panel-fit-keep {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+box.panel-fit-keep {
+  padding-top: 0;
+  padding-bottom: 0;
+}

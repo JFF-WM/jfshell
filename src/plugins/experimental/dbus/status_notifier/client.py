@@ -67,10 +67,17 @@ def get_plugin_class():
             self.subscribe_to_removal_events()
 
             container_id = "org.jfshell.plugin.status_notifier"
-            default_container_name = "top_panel_box_right"
+            default_container_name = "top_panel_box_systray"
             target_container_name, _ = self.panel.config_handler.get_plugin_container(
                 default_container_name, container_id
             )
+            # Configs written by older versions stored the previous default, which
+            # is outside the systray area.
+            if target_container_name == "top_panel_box_right":
+                target_container_name = default_container_name
+                self.panel.config_handler.set_root_setting(
+                    [container_id, "container"], target_container_name
+                )
             attr_name = target_container_name.replace("-", "_")
             target_container = getattr(self._panel_instance, attr_name, None)
 
@@ -80,7 +87,10 @@ def get_plugin_class():
             self.tray_box.add_css_class("tray-box")
             self.tray_box.set_valign(self.gtk.Align.CENTER)
 
-            if target_container and hasattr(target_container, "append"):
+            if target_container and hasattr(target_container, "prepend"):
+                # Status icons go first, before the other buttons of the area.
+                target_container.prepend(self.tray_box)
+            elif target_container and hasattr(target_container, "append"):
                 target_container.append(self.tray_box)
             else:
                 self._panel_instance.top_panel_box_center.append(self.tray_box)
