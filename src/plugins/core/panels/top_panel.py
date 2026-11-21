@@ -90,27 +90,14 @@ def get_plugin_class():
             self.obj.top_panel_box_center.set_valign(self.gtk.Align.CENTER)
             self.obj.top_panel_box_center.set_hexpand(False)
 
-            # Main Grid Assembly
-            self.obj.top_panel_box_full = self.gtk.Grid()
-            self.obj.top_panel_box_full.set_column_homogeneous(True)
-            self.obj.top_panel_box_full.attach(self.obj.top_panel_box_left, 1, 0, 1, 2)
-
-            self._attach_widget_to_grid_next_to(
-                self.obj.top_panel_box_full,
-                self.obj.top_panel_box_center,
-                self.obj.top_panel_box_left,
-                self.gtk.PositionType.RIGHT,
-                1,
-                2,
-            )
-            self._attach_widget_to_grid_next_to(
-                self.obj.top_panel_box_full,
-                self.obj.top_panel_grid_right,
-                self.obj.top_panel_box_center,
-                self.gtk.PositionType.RIGHT,
-                1,
-                3,
-            )
+            # Main Layout Assembly. A CenterBox keeps the center widget centered while
+            # left and right only take the width they need. The homogeneous grid it
+            # replaces gave all three columns the width of the widest one, so a wide
+            # left side (the global menu) made the whole panel scroll.
+            self.obj.top_panel_box_full = self.gtk.CenterBox()
+            self.obj.top_panel_box_full.set_start_widget(self.obj.top_panel_box_left)
+            self.obj.top_panel_box_full.set_center_widget(self.obj.top_panel_box_center)
+            self.obj.top_panel_box_full.set_end_widget(self.obj.top_panel_grid_right)
 
             # Scrolled Window Wrapper
             self.obj.top_panel_scrolled_window = self.gtk.ScrolledWindow()

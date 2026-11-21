@@ -62,12 +62,15 @@ class EventServer:
         """Turn one jff ``watch`` event into the panel's internal events.
 
         ``state`` is owned by ``read_events`` (``windows``: id -> last known window,
-        ``overview``: bool). Internal names: view-mapped, view-unmapped,
+        ``overview``: bool, ``annotations``: id -> last known DBus annotation).
+        Internal names: view-mapped, view-unmapped,
         view-focused, view-title-changed, view-app-id-changed,
-        workspace-changed, overview-changed, view-drag-changed.
+        workspace-changed, overview-changed, view-drag-changed,
+        dbus-annotation, dbus-annotation-removed.
         """
         kind = ev.get("event")
         views: dict = state["windows"]
+        annotations: dict = state.setdefault("annotations", {})
 
         if kind == "snapshot":
             old = dict(views)
@@ -85,6 +88,25 @@ class EventServer:
             if "overview" in ev and bool(ev["overview"]) != state["overview"]:
                 state["overview"] = bool(ev["overview"])
                 yield cls._overview_msg(state["overview"])
+            if "dbus_annotations" in ev:
+                old_annotations = dict(annotations)
+                new_annotations = {a["id"]: a for a in ev["dbus_annotations"]}
+                annotations.clear()
+                annotations.update(new_annotations)
+                for aid, a in new_annotations.items():
+                    if old_annotations.get(aid) != a:
+                        yield cls._annotation_msg(a)
+                for aid in old_annotations:
+                    if aid not in new_annotations:
+                        yield {"event": "dbus-annotation-removed", "id": aid}
+
+        elif kind == "dbus-annotation":
+            annotations[ev["id"]] = ev
+            yield cls._annotation_msg(ev)
+
+        elif kind == "dbus-annotation-removed":
+            annotations.pop(ev["id"], None)
+            yield {"event": "dbus-annotation-removed", "id": ev["id"]}
 
         elif kind == "window-opened":
             views[ev["id"]] = ev
@@ -159,6 +181,21 @@ class EventServer:
             }
 
     @staticmethod
+    def _annotation_msg(a: dict) -> dict:
+        """Internal ``dbus-annotation`` event for one annotation jff reported."""
+        return {
+            "event": "dbus-annotation",
+            "annotation": {
+                "id": a["id"],
+                "window": a.get("window"),
+                "pid": a.get("pid"),
+                "interface": a.get("interface"),
+                "service_name": a.get("service_name"),
+                "object_path": a.get("object_path"),
+            },
+        }
+
+    @staticmethod
     def _overview_msg(is_open: bool) -> dict:
         return {
             "event": "overview-changed",
@@ -180,7 +217,7 @@ class EventServer:
 
     def read_events(self) -> None:
         """Follow jff's ``watch`` stream (no polling) and feed ``event_queue``."""
-        state: dict[str, Any] = {"windows": {}, "overview": False}
+        state: dict[str, Any] = {"windows": {}, "overview": False, "annotations": {}}
         while not self._stopping.is_set():
             if not self.is_socket_active():
                 time.sleep(2)
