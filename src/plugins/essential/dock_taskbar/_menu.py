@@ -116,14 +116,8 @@ class DockTaskbarMenu:
             label = "Close All Windows" if len(entry.views) > 1 else "Close Window"
             rows.append(self._row(label, "window-close-symbolic", lambda: p.close_all(entry)))
         if entry.pinned:
-            before, after = (
-                ("Move Up", "Move Down") if p.vertical else ("Move Left", "Move Right")
-            )
-            before_icon, after_icon = (
-                ("go-up-symbolic", "go-down-symbolic")
-                if p.vertical
-                else ("go-previous-symbolic", "go-next-symbolic")
-            )
+            before, after = "Move Left", "Move Right"
+            before_icon, after_icon = "go-previous-symbolic", "go-next-symbolic"
             rows.append(self._row(before, before_icon, lambda: p.move_pinned(entry, -1)))
             rows.append(self._row(after, after_icon, lambda: p.move_pinned(entry, 1)))
             rows.append(self._row("Unpin from Dock", "list-remove-symbolic", lambda: p.unpin(entry)))

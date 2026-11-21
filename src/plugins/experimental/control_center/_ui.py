@@ -392,14 +392,6 @@ def get_ui_class():
                 "bottom-panel-right",
                 "bottom-panel-box-systray",
                 "bottom-panel-box-for-buttons",
-                "left-panel",
-                "left-panel-top",
-                "left-panel-center",
-                "left-panel-bottom",
-                "right-panel",
-                "right-panel-top",
-                "right-panel-center",
-                "right-panel-bottom",
                 "background",
             ]
 

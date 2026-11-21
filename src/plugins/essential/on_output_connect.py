@@ -113,8 +113,6 @@ def get_plugin_class():
                 return
 
             LayerShell.set_monitor(self.top_panel, monitor_gdk_obj)
-            LayerShell.set_monitor(self.left_panel, monitor_gdk_obj)
-            LayerShell.set_monitor(self.right_panel, monitor_gdk_obj)
             LayerShell.set_monitor(self.bottom_panel, monitor_gdk_obj)
 
             self.logger.info(f"Panel anchored to: {monitor_gdk_obj.get_connector()}")

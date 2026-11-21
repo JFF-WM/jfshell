@@ -175,7 +175,7 @@ class Panel(Adw.Application):
 
     def setup_panels(self):
         """
-        Set up all panels (top, bottom, left, right) based on the configuration.
+        Set up all panels (top, bottom) based on the configuration.
         Each panel's properties are determined by the KDL configuration file.
         """
         self.logger.info("Setting up panels...")
@@ -186,10 +186,6 @@ class Panel(Adw.Application):
                     self._setup_top_panel(config)
                 elif panel_type == "bottom":
                     self._setup_bottom_panel(config)
-                elif panel_type == "left":
-                    self._setup_left_panel(config)
-                elif panel_type == "right":
-                    self._setup_right_panel(config)
                 else:
                     pass
             except Exception as e:
@@ -296,83 +292,3 @@ class Panel(Adw.Application):
         if config.get("enabled", True):
             self.bottom_panel.present()
         self.logger.info("Bottom panel setup completed.")
-
-    def _setup_left_panel(self, config):
-        """
-        Configure the left panel based on the provided configuration.
-        """
-        self.logger.debug("Setting up left panel...")
-        anchor_edge = "LEFT"
-        css_class = "left-panel"
-
-        exclusive = self.get_setting_add_hint(
-            ["org.jfshell.panel", "left", "Exclusive"],
-            bool(config.get("Exclusive", 1.0)),
-            "Reserve space for the left panel",
-        )
-        layer_position = self.get_setting_add_hint(
-            ["org.jfshell.panel", "left", "layer_position"],
-            config.get("layer_position", "TOP"),
-            "Layer position (panels are always placed on TOP)",
-        )
-        width = self.get_setting_add_hint(
-            ["org.jfshell.panel", "left", "width"], 32.0, "Width of the left panel"
-        )
-        height = self.get_setting_add_hint(
-            ["org.jfshell.panel", "left", "height"], 0.0, "Height of the left panel"
-        )
-        namespace = "JFShell-Left"
-
-        self.left_panel = CREATE_PANEL_MODULE.CreatePanel(
-            self.panel_instance,  # pyright: ignore
-            anchor_edge,
-            layer_position,
-            exclusive,
-            width,  # pyright: ignore
-            height,  # pyright: ignore
-            css_class,
-            namespace,
-        )
-        if config.get("enabled", True):
-            self.left_panel.present()
-        self.logger.info("Left panel setup completed.")
-
-    def _setup_right_panel(self, config):
-        """
-        Configure the right panel based on the provided configuration.
-        """
-        self.logger.debug("Setting up right panel...")
-        anchor_edge = "RIGHT"
-        css_class = "right-panel"
-
-        exclusive = self.get_setting_add_hint(
-            ["org.jfshell.panel", "right", "Exclusive"],
-            bool(config.get("Exclusive", 1.0)),
-            "Reserve space for the right panel",
-        )
-        layer_position = self.get_setting_add_hint(
-            ["org.jfshell.panel", "right", "layer_position"],
-            config.get("layer_position", "TOP"),
-            "Layer position (panels are always placed on TOP)",
-        )
-        width = self.get_setting_add_hint(
-            ["org.jfshell.panel", "right", "width"], 32.0, "Width of the right panel"
-        )
-        height = self.get_setting_add_hint(
-            ["org.jfshell.panel", "right", "height"], 0.0, "Height of the right panel"
-        )
-        namespace = "JFShell-Right"
-
-        self.right_panel = CREATE_PANEL_MODULE.CreatePanel(
-            self.panel_instance,  # pyright: ignore
-            anchor_edge,
-            layer_position,
-            exclusive,
-            width,  # pyright: ignore
-            height,  # pyright: ignore
-            css_class,
-            namespace,
-        )
-        if config.get("enabled", True):
-            self.right_panel.present()
-        self.logger.info("Right panel setup completed.")

@@ -58,10 +58,9 @@ class DockTaskbarUI:
         from gi.repository import Gtk
 
         p = self.plugin
-        orientation = (
-            Gtk.Orientation.VERTICAL if p.vertical else Gtk.Orientation.HORIZONTAL
+        p.dock = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=self.config.spacing
         )
-        p.dock = Gtk.Box(orientation=orientation, spacing=self.config.spacing)
         p.dock.add_css_class("dock-taskbar")
         p.dock.set_halign(Gtk.Align.CENTER)
         p.dock.set_valign(Gtk.Align.CENTER)
@@ -83,22 +82,12 @@ class DockTaskbarUI:
         icon_name = button.get_icon_name() or "start-here"
         image = Gtk.Image.new_from_icon_name(icon_name)
         image.set_pixel_size(self.config.icon_size)
-        dots = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL
-            if p.vertical
-            else Gtk.Orientation.HORIZONTAL,
-            spacing=3,
-        )
+        dots = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=3)
         dots.add_css_class("dock-taskbar-dots")
         dots.set_halign(Gtk.Align.CENTER)
         dots.set_valign(Gtk.Align.CENTER)
-        inner = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL
-            if p.vertical
-            else Gtk.Orientation.VERTICAL,
-            spacing=2,
-        )
-        if p.position in ("bottom", "right"):
+        inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        if p.position == "bottom":
             inner.append(image)
             inner.append(dots)
         else:
@@ -156,22 +145,14 @@ class DockTaskbarUI:
 
         button.icon = Gtk.Image()  # pyright: ignore
         button.icon.set_pixel_size(self.config.icon_size)  # pyright: ignore
-        dots_orientation = (
-            Gtk.Orientation.VERTICAL if p.vertical else Gtk.Orientation.HORIZONTAL
-        )
-        button.dots = Gtk.Box(orientation=dots_orientation, spacing=3)  # pyright: ignore
+        button.dots = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=3)  # pyright: ignore
         button.dots.add_css_class("dock-taskbar-dots")  # pyright: ignore
         button.dots.set_halign(Gtk.Align.CENTER)  # pyright: ignore
         button.dots.set_valign(Gtk.Align.CENTER)  # pyright: ignore
         button.dot_widgets = []  # pyright: ignore
 
         # The dots sit on the side of the screen edge the panel is on.
-        inner = Gtk.Box(
-            orientation=Gtk.Orientation.HORIZONTAL
-            if p.vertical
-            else Gtk.Orientation.VERTICAL,
-            spacing=2,
-        )
+        inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         # A small speaker badge sits in the corner of the icon while its app
         # plays sound (see set_audio).
         badge = Gtk.Image.new_from_icon_name("audio-volume-high-symbolic")
@@ -209,7 +190,7 @@ class DockTaskbarUI:
             state_badges.append(image)
         overlay.add_overlay(state_badges)
 
-        if p.position in ("bottom", "right"):
+        if p.position == "bottom":
             inner.append(overlay)
             inner.append(button.dots)  # pyright: ignore
         else:
@@ -226,12 +207,7 @@ class DockTaskbarUI:
         """A thin line between the pinned launchers and the other apps."""
         from gi.repository import Gtk
 
-        orientation = (
-            Gtk.Orientation.HORIZONTAL
-            if self.plugin.vertical
-            else Gtk.Orientation.VERTICAL
-        )
-        sep = Gtk.Separator(orientation=orientation)
+        sep = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
         sep.add_css_class("dock-taskbar-separator")
         return sep
 

@@ -500,14 +500,6 @@ class BasePlugin:
         return self.obj.top_panel
 
     @property
-    def left_panel(self) -> Any:
-        return self.obj.left_panel
-
-    @property
-    def right_panel(self) -> Any:
-        return self.obj.right_panel
-
-    @property
     def path_handler(self) -> PathHandler:
         """Read-only access to the PathHandler instance."""
         return self._path_handler

@@ -20,8 +20,6 @@ def get_plugin_class():
             self.panels_to_process = [
                 "top_panel",
                 "bottom_panel",
-                "left_panel",
-                "right_panel",
             ]
 
         def on_start(self):

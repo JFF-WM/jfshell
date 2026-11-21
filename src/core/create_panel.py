@@ -145,12 +145,8 @@ def setup_layer_shell(
         LayerShell.set_margin(window, LayerShell.Edge.TOP, margin_top)
     if margin_bottom > 0:
         LayerShell.set_margin(window, LayerShell.Edge.BOTTOM, margin_bottom)
-    if margin_left > 0:
-        LayerShell.set_margin(window, LayerShell.Edge.LEFT, margin_left)
-    if margin_right > 0:
-        LayerShell.set_margin(window, LayerShell.Edge.RIGHT, margin_right)
 
-    if anchor in ["LEFT", "RIGHT", "TOP", "BOTTOM"]:
+    if anchor in ["TOP", "BOTTOM"]:
         edge = getattr(LayerShell.Edge, anchor)
         LayerShell.set_anchor(window, edge, True)
         if exclusive:

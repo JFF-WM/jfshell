@@ -60,52 +60,6 @@ default_config = {
             "height": 32.0,
             "height_hint": "The fixed height (in pixels) of this horizontal panel.",
         },
-        "left": {
-            "_section_hint": (
-                "Left panel configuration. Often used for the Dockbar plugin."
-            ),
-            "enabled": 1.0,
-            "enabled_hint": (
-                "Set to **1.0 (enabled)** or **0.0 (disabled)** to show "
-                "or hide this entire panel layer."
-            ),
-            "layer_position": "TOP",
-            "layer_position_hint": (
-                "The **stacking order layer** this panel will be placed on. "
-                "Panels are always placed on 'TOP' (above windows)."
-            ),
-            "Exclusive": 0,
-            "Exclusive_hint": (
-                "Set to **1.0 (exclusive)** if the panel should permanently "
-                "reserve screen space."
-            ),
-            "height": 0.0,
-            "height_hint": "The height (in pixels) of this vertical panel. Set to 0.0 to allow the dockbar to center vertically.",
-            "width_hint": "The fixed width (in pixels) of this vertical panel.",
-        },
-        "right": {
-            "_section_hint": (
-                "Right panel configuration. Reserved for future plugins."
-            ),
-            "enabled": 1.0,
-            "enabled_hint": (
-                "Set to **1.0 (enabled)** or **0.0 (disabled)** to show "
-                "or hide this entire panel layer."
-            ),
-            "layer_position": "TOP",
-            "layer_position_hint": (
-                "The **stacking order layer** this panel will be placed on. "
-                "Panels are always placed on 'TOP' (above windows)."
-            ),
-            "Exclusive": 0,
-            "Exclusive_hint": (
-                "Set to **1.0 (exclusive)** if the panel should permanently "
-                "reserve screen space."
-            ),
-            "height": 0.0,
-            "height_hint": "The height (in pixels) of this vertical panel. Set to 0.0 to allow the dockbar to center vertically.",
-            "width_hint": "The fixed width (in pixels) of this vertical panel.",
-        },
         "top": {
             "_section_hint": (
                 "Top panel configuration. Often used for status indicators and menus."

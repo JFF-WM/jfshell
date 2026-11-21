@@ -22,7 +22,7 @@ class DockTaskbarPreview:
     # Wait before a preview closes: time to cross the gap onto the popover.
     LEAVE_DELAY_MS = 350
     # Where the popover sits relative to the button, per panel position.
-    POSITIONS = {"bottom": "TOP", "top": "BOTTOM", "left": "RIGHT", "right": "LEFT"}
+    POSITIONS = {"bottom": "TOP", "top": "BOTTOM"}
 
     def __init__(self, plugin_instance):
         """Initializes the preview handler.
@@ -206,13 +206,7 @@ class DockTaskbarPreview:
             self.plugin.logger.debug(f"Preview effect reset failed: {e}")
         self._release_popover()
         self._pictures = {}
-        vertical = self.plugin.vertical
-        row = Gtk.Box(
-            orientation=Gtk.Orientation.VERTICAL
-            if vertical
-            else Gtk.Orientation.HORIZONTAL,
-            spacing=8,
-        )
+        row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         for view, texture in cards:
             row.append(self._build_card(entry, view, texture, scale))
 

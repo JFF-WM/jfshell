@@ -11,8 +11,6 @@ def get_plugin_metadata(_):
             "on_output_connect",
             "top_panel",
             "bottom_panel",
-            "left_panel",
-            "right_panel",
         ],
         "description": about,
     }
@@ -28,9 +26,7 @@ def get_plugin_class():
 
         def on_start(self):
             self.logger.info("PanelScaleExclusivePlugin started.")
-            self.exclusive_state = {
-                k: False for k in ["top", "bottom", "left", "right"]
-            }
+            self.exclusive_state = {k: False for k in ["top", "bottom"]}
             self.on_output_plugin = self.plugins.get("on_output_connect")
 
             self.event_mgr = self.plugins.get("event_manager")
@@ -63,12 +59,10 @@ def get_plugin_class():
                 )
 
         def set_panels_exclusive(self, exclusive=True):
-            """Helper method to set/unset exclusive mode on all four panels."""
+            """Helper method to set/unset exclusive mode on all panels."""
 
             panels = [
                 self.bottom_panel,
-                self.left_panel,
-                self.right_panel,
             ]
 
             action = (

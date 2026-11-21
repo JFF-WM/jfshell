@@ -12,7 +12,7 @@ def _as_int(value, default, minimum=0):
 class DockTaskbarConfig:
     """Registers every setting (with hints for the Control Center) and keeps the values."""
 
-    POSITIONS = ("bottom", "top", "left", "right")
+    POSITIONS = ("bottom", "top")
 
     def __init__(self, plugin_instance):
         """Initializes the config handler.
@@ -30,7 +30,7 @@ class DockTaskbarConfig:
             h(
                 ["panel", "position"],
                 "bottom",
-                "Which panel the bar sits on (bottom, top, left, right).",
+                "Which panel the bar sits on (bottom, top).",
             )
         ).lower()
         if self.panel_position not in self.POSITIONS:

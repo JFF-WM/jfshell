@@ -1,7 +1,7 @@
 """Panel layout mode helpers.
 
 Two layout modes exist:
-  * "classic": top, bottom, left and right panels (default)
+  * "classic": top and bottom panels (default)
   * "single":  one exclusive bottom panel hosting every widget
 """
 

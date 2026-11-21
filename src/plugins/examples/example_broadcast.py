@@ -17,14 +17,6 @@ def get_plugin_metadata(panel):
             "bottom-panel-left"
             "bottom-panel-center"
             "bottom-panel-right"
-        - Left Panel:
-            "left-panel-top"
-            "left-panel-center"
-            "left-panel-bottom"
-        - Right Panel:
-            "right-panel-top"
-            "right-panel-center"
-            "right-panel-bottom"
         - Background:
             "background"
     Returns:

@@ -7,8 +7,6 @@ def get_plugin_metadata(panel_instance):
         )
     ).lower()
     containers = {
-        "left": "left-panel-center",
-        "right": "right-panel-center",
         "top": "top-panel-center",
         "bottom": "bottom-panel-center",
     }
@@ -85,7 +83,6 @@ def get_plugin_class():
             self.config = DockTaskbarConfig(self)
             self.config.register_settings()
             self.position = self.config.panel_position
-            self.vertical = self.position in ("left", "right")
             self.audio = DockTaskbarAudio()
 
             self.ui = DockTaskbarUI(self)

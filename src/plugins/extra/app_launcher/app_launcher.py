@@ -281,13 +281,9 @@ def get_plugin_class():
                 has_arrow=False,
                 closed_handler=self.popover_is_closed,
                 visible_handler=self.popover_is_open,
-                offset={"left": (5, 0), "right": (-5, 0), "bottom": (0, -5)}.get(
-                    self.dock_side, (0, 5)
-                ),
+                offset={"bottom": (0, -5)}.get(self.dock_side, (0, 5)),
             )
             side_position = {
-                "left": self.gtk.PositionType.RIGHT,
-                "right": self.gtk.PositionType.LEFT,
                 "bottom": self.gtk.PositionType.TOP,
             }.get(self.dock_side)
             if side_position is not None:

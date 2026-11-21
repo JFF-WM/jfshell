@@ -172,7 +172,7 @@ def get_plugin_class():
                 "for_buttons": o.single_panel_box_buttons,
                 "full": o.single_panel_box_full,
             }
-            for prefix in ("top", "bottom", "left", "right"):
+            for prefix in ("top", "bottom"):
                 for suffix, widget in aliases.items():
                     setattr(o, f"{prefix}_panel_box_{suffix}", widget)
 

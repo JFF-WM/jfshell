@@ -72,14 +72,6 @@ class PluginLoaderHelpers:
             "bottom-panel-box-widgets-left": "bottom_panel_box_widgets_left",
             "bottom-panel-box-systray": "bottom_panel_box_systray",
             "bottom-panel-box-for-buttons": "bottom_panel_box_for_buttons",
-            "left-panel": "left_panel",
-            "left-panel-top": "left_panel_box_top",
-            "left-panel-center": "left_panel_box_center",
-            "left-panel-bottom": "left_panel_box_bottom",
-            "right-panel": "right_panel",
-            "right-panel-top": "right_panel_box_top",
-            "right-panel-center": "right_panel_box_center",
-            "right-panel-bottom": "right_panel_box_bottom",
             "background": "background",
         }
 
@@ -194,8 +186,6 @@ class PluginLoaderHelpers:
         core_panels = {
             "org.jfshell.plugin.top_panel",
             "org.jfshell.plugin.bottom_panel",
-            "org.jfshell.plugin.left_panel",
-            "org.jfshell.plugin.right_panel",
         }
         if p_id in core_panels:
             return metadata.get("deps", [])
@@ -208,8 +198,6 @@ class PluginLoaderHelpers:
         dep_map = {
             "top": "top_panel",
             "bottom": "bottom_panel",
-            "left": "left_panel",
-            "right": "right_panel",
         }
 
         required_dep = dep_map.get(direction)

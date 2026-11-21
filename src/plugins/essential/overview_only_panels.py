@@ -16,7 +16,7 @@ def get_plugin_class():
     class OverviewOnlyPanels(BasePlugin):
         """Shows non-exclusive panel windows only while the overview is open."""
 
-        PANELS = ("top_panel", "bottom_panel", "left_panel", "right_panel")
+        PANELS = ("top_panel", "bottom_panel")
         # Config key holding the exclusive flag for each panel type.
         EXCLUSIVE_KEY = "Exclusive"
 
