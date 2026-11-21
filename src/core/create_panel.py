@@ -21,9 +21,9 @@ def set_layer_position_exclusive(window) -> None:
 
 
 def unset_layer_position_exclusive(window) -> None:
-    """Sets the layer to background."""
+    """Keeps the layer on TOP: jff draws bottom and background layers as wallpaper."""
     if window:
-        LayerShell.set_layer(window, LayerShell.Layer.BOTTOM)
+        LayerShell.set_layer(window, LayerShell.Layer.TOP)
 
 
 def get_monitor_info() -> Dict[str, Dict[str, Any]]:
@@ -137,19 +137,18 @@ def setup_layer_shell(
     if monitor and "monitor" in monitor:
         LayerShell.set_monitor(window, monitor["monitor"])
 
-    layer = layer.upper()
-    if layer in ("TOP", "LEFT", "RIGHT"):
-        LayerShell.set_layer(window, LayerShell.Layer.TOP)
-        if margin_top > 0:
-            LayerShell.set_margin(window, LayerShell.Edge.TOP, margin_top)
-        if margin_bottom > 0:
-            LayerShell.set_margin(window, LayerShell.Edge.BOTTOM, margin_bottom)
-        if margin_left > 0:
-            LayerShell.set_margin(window, LayerShell.Edge.LEFT, margin_left)
-        if margin_right > 0:
-            LayerShell.set_margin(window, LayerShell.Edge.RIGHT, margin_right)
-    else:
-        LayerShell.set_layer(window, LayerShell.Layer.BACKGROUND)
+    # Always TOP, with or without an exclusive zone: jff draws the background and
+    # bottom layers as wallpaper in the overview, so a panel there is shrunk and blurred.
+    # `layer` is kept for callers and the config, it no longer picks the layer.
+    LayerShell.set_layer(window, LayerShell.Layer.TOP)
+    if margin_top > 0:
+        LayerShell.set_margin(window, LayerShell.Edge.TOP, margin_top)
+    if margin_bottom > 0:
+        LayerShell.set_margin(window, LayerShell.Edge.BOTTOM, margin_bottom)
+    if margin_left > 0:
+        LayerShell.set_margin(window, LayerShell.Edge.LEFT, margin_left)
+    if margin_right > 0:
+        LayerShell.set_margin(window, LayerShell.Edge.RIGHT, margin_right)
 
     if anchor in ["LEFT", "RIGHT", "TOP", "BOTTOM"]:
         edge = getattr(LayerShell.Edge, anchor)

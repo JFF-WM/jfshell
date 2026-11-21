@@ -227,7 +227,9 @@ class DockTaskbarUI:
         from gi.repository import Gtk
 
         orientation = (
-            Gtk.Orientation.HORIZONTAL if self.plugin.vertical else Gtk.Orientation.VERTICAL
+            Gtk.Orientation.HORIZONTAL
+            if self.plugin.vertical
+            else Gtk.Orientation.VERTICAL
         )
         sep = Gtk.Separator(orientation=orientation)
         sep.add_css_class("dock-taskbar-separator")
@@ -263,7 +265,9 @@ class DockTaskbarUI:
     def _on_right_click(self, gesture, n_press, x, y):
         self.plugin.preview.hide()
         button = gesture.get_widget()
-        self.plugin.menu.show_app(button, x, y, self.plugin.entry_map.get(button.entry_key))
+        self.plugin.menu.show_app(
+            button, x, y, self.plugin.entry_map.get(button.entry_key)
+        )
 
     def _on_middle_click(self, gesture, n_press, x, y):
         self.plugin.preview.hide()
@@ -336,10 +340,14 @@ class DockTaskbarUI:
         icon = p.icon_for(entry)
         name = p.name_for(entry)
         count = len(entry.views)
-        dots = min(count, self.config.max_indicators) if self.config.show_indicators else 0
+        dots = (
+            min(count, self.config.max_indicators) if self.config.show_indicators else 0
+        )
         # Derived from the windows already listed for this sync: no extra IPC.
         atop, sticky = (
-            state_flags(entry.views) if self.config.show_state_badges else (False, False)
+            state_flags(entry.views)
+            if self.config.show_state_badges
+            else (False, False)
         )
         state = (
             icon,

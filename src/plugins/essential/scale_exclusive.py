@@ -40,6 +40,22 @@ def get_plugin_class():
                     "overview-changed", self.handle_overview_event, "scale_exclusive"
                 )
 
+            # The overview can be open before the shell is: jff opens it by itself
+            # when the monitor has no windows, which is the case when a session
+            # starts. No event comes for that, so look at the state once.
+            self.glib.idle_add(self._sync_initial_state)
+
+        def _sync_initial_state(self):
+            """Puts the panels on the overview's layers when it was already open."""
+            try:
+                is_open = bool(self.ipc.is_overview_active())
+            except Exception as e:
+                self.logger.error(f"Could not read the overview state: {e}")
+                return False
+            if is_open:
+                self.on_overview_activated()
+            return False
+
         def on_stop(self):
             if hasattr(self, "event_mgr") and self.event_mgr:
                 self.event_mgr.unsubscribe_from_event(

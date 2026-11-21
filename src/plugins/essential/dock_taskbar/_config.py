@@ -71,6 +71,15 @@ class DockTaskbarConfig:
                 "that is always on top and/or sticky (visible on all workspaces).",
             )
         )
+        self.blur_to_dock = bool(
+            h(
+                ["layout", "blur_to_dock"],
+                True,
+                "Make only the dock take input in its panel window, so the compositor "
+                "blurs just the dock (not the whole window). Round its corners with "
+                "`layer-radius` in the blur block of the jff config.",
+            )
+        )
         self.max_indicators = _as_int(
             h(
                 ["layout", "max_indicators"],

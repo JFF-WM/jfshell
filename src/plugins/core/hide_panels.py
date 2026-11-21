@@ -50,7 +50,7 @@ def get_plugin_class():
             Directly manipulates the panel window using self.layer_shell.
             Fixes AttributeError by using set_keyboard_mode for Gtk4.
             """
-            self.layer_shell.set_layer(panel_window, self.layer_shell.Layer.BACKGROUND)
+            self.layer_shell.set_layer(panel_window, self.layer_shell.Layer.TOP)
             self.layer_shell.set_exclusive_zone(panel_window, 0)
             self.layer_shell.set_keyboard_mode(
                 panel_window, self.layer_shell.KeyboardMode.NONE
@@ -58,7 +58,7 @@ def get_plugin_class():
             panel_window.present()
 
             self.logger.info(
-                f"HidePanels: {panel_key} successfully sunk to background layer."
+                f"HidePanels: {panel_key} released its exclusive zone on the TOP layer."
             )
 
         def on_disable(self):

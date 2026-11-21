@@ -45,10 +45,10 @@ default_config = {
                 "Set to **1.0 (enabled)** or **0.0 (disabled)** to show "
                 "or hide this entire panel layer."
             ),
-            "layer_position": "BACKGROUND",
+            "layer_position": "TOP",
             "layer_position_hint": (
                 "The **stacking order layer** this panel will be placed on. "
-                "Use 'BACKGROUND' (behind windows) or 'TOP' (above windows)."
+                "Panels are always placed on 'TOP' (above windows)."
             ),
             "Exclusive": 0,
             "Exclusive_hint": (
@@ -69,10 +69,10 @@ default_config = {
                 "Set to **1.0 (enabled)** or **0.0 (disabled)** to show "
                 "or hide this entire panel layer."
             ),
-            "layer_position": "BACKGROUND",
+            "layer_position": "TOP",
             "layer_position_hint": (
                 "The **stacking order layer** this panel will be placed on. "
-                "Use 'BACKGROUND' (behind windows) or 'TOP' (above windows)."
+                "Panels are always placed on 'TOP' (above windows)."
             ),
             "Exclusive": 0,
             "Exclusive_hint": (
@@ -92,10 +92,10 @@ default_config = {
                 "Set to **1.0 (enabled)** or **0.0 (disabled)** to show "
                 "or hide this entire panel layer."
             ),
-            "layer_position": "BACKGROUND",
+            "layer_position": "TOP",
             "layer_position_hint": (
                 "The **stacking order layer** this panel will be placed on. "
-                "Use 'BACKGROUND' (behind windows) or 'TOP' (above windows)."
+                "Panels are always placed on 'TOP' (above windows)."
             ),
             "Exclusive": 0,
             "Exclusive_hint": (
@@ -113,7 +113,7 @@ default_config = {
             "layer_position": "TOP",
             "layer_position_hint": (
                 "The **stacking order layer** this panel will be placed on. "
-                "Use 'BACKGROUND' (behind windows) or 'TOP' (above windows)."
+                "Panels are always placed on 'TOP' (above windows)."
             ),
             "Exclusive": 1.0,
             "Exclusive_hint": (

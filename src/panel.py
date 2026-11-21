@@ -214,7 +214,7 @@ class Panel(Adw.Application):
         layer_position = self.get_setting_add_hint(
             ["org.jfshell.panel", "top", "layer_position"],
             config.get("layer_position", "TOP"),
-            "Layer position: BACKGROUND, BOTTOM, TOP, OVERLAY",
+            "Layer position (panels are always placed on TOP)",
         )
         width = self.get_setting_add_hint(
             ["org.jfshell.panel", "top", "width"],
@@ -268,8 +268,8 @@ class Panel(Adw.Application):
         )
         layer_position = self.get_setting_add_hint(
             ["org.jfshell.panel", "bottom", "layer_position"],
-            config.get("layer_position", "BACKGROUND"),
-            "Layer position: BACKGROUND, BOTTOM, TOP, OVERLAY",
+            config.get("layer_position", "TOP"),
+            "Layer position (panels are always placed on TOP)",
         )
         width = self.get_setting_add_hint(
             ["org.jfshell.panel", "bottom", "width"],
@@ -312,8 +312,8 @@ class Panel(Adw.Application):
         )
         layer_position = self.get_setting_add_hint(
             ["org.jfshell.panel", "left", "layer_position"],
-            config.get("layer_position", "BACKGROUND"),
-            "Layer position: BACKGROUND, BOTTOM, TOP, OVERLAY",
+            config.get("layer_position", "TOP"),
+            "Layer position (panels are always placed on TOP)",
         )
         width = self.get_setting_add_hint(
             ["org.jfshell.panel", "left", "width"], 32.0, "Width of the left panel"
@@ -352,8 +352,8 @@ class Panel(Adw.Application):
         )
         layer_position = self.get_setting_add_hint(
             ["org.jfshell.panel", "right", "layer_position"],
-            config.get("layer_position", "BACKGROUND"),
-            "Layer position: BACKGROUND, BOTTOM, TOP, OVERLAY",
+            config.get("layer_position", "TOP"),
+            "Layer position (panels are always placed on TOP)",
         )
         width = self.get_setting_add_hint(
             ["org.jfshell.panel", "right", "width"], 32.0, "Width of the right panel"

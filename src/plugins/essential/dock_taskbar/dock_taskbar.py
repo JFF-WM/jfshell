@@ -44,6 +44,7 @@ def get_plugin_class():
         without,
     )
     from ._preview import DockTaskbarPreview
+    from ._region import DockTaskbarRegion
     from ._ui import DockTaskbarUI
 
     # The launcher list of the old dockbar, used until this plugin saves its own.
@@ -91,6 +92,7 @@ def get_plugin_class():
             self.menu = DockTaskbarMenu(self)
             self.preview = DockTaskbarPreview(self)
             self.events = DockTaskbarEvents(self)
+            self.region = DockTaskbarRegion(self)
 
             self.ui.create_layout()
             self.ui.attach_launcher()
@@ -102,6 +104,8 @@ def get_plugin_class():
             self.watch_config()
             self.plugins["css_generator"].install_css("dock_taskbar.css")
             self._setup_exclusive_zone()
+            if self.config.blur_to_dock:
+                self.region.start()
 
         def _setup_exclusive_zone(self):
             if not self.config.layer_always_exclusive:
@@ -269,6 +273,7 @@ def get_plugin_class():
                 if focused is not None:
                     self.last_focused[entry.key] = focused.get("id")
             self.ui.apply(entries)
+            self.region.request()
             self.refresh_audio()
             open_key = self.preview.key
             if open_key in self.entry_map:
@@ -414,6 +419,7 @@ def get_plugin_class():
                 self._config_monitor.cancel()
                 self._config_monitor = None
             self.events.unsubscribe()
+            self.region.stop()
             self.preview.destroy()
             self.menu.destroy()
 

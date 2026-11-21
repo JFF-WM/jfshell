@@ -2,7 +2,7 @@ def get_plugin_metadata(panel):
     """Retrieves the metadata for the Universal Update plugin.
 
     Args:
-        panel: The panel instance used to resolve plugin configuration and containers.
+        panel: The panel instance (unused, the plugin lives in the clock popover).
 
     Returns:
         dict: A dictionary containing plugin identification, requirements, and metadata.
@@ -12,17 +12,13 @@ def get_plugin_metadata(panel):
     bins = ["pacman", "dnf", "apt", "zypper", "xbps-install", "apk", "flatpak"]
     ENABLE = any(shutil.which(b) for b in bins)
     id = "org.jfshell.plugin.universal_update"
-    default_container = "top-panel-center"
-    container, id = panel.config_handler.get_plugin_container(default_container, id)
     return {
         "id": id,
         "name": "Universal Update",
         "version": "2.5.1",
         "enabled": ENABLE,
-        "index": 11,
-        "container": container,
-        "deps": ["css_generator", "status_notifier"],
-        "description": "Universal Linux update manager with per-backend custom commands.",
+        "deps": ["css_generator", "calendar"],
+        "description": "Universal Linux update manager with per-backend custom commands, shown as a page of the clock popover.",
     }
 
 
@@ -35,6 +31,8 @@ def get_plugin_class():
     import shutil
     from src.plugins.core._base import BasePlugin
     from ._manager import get_manager
+
+    PAGE_ID = "universal_update"
 
     class UniversalUpdate(BasePlugin):
         """Plugin for orchestrating system updates across multiple Linux package managers."""
@@ -99,19 +97,17 @@ def get_plugin_class():
                 ["kitty", "alacritty", "terminator", "xterm", "gnome-terminal"],
                 "Preferred terminals.",
             )
-            self.trigger_button = self.gtk.Button()
-            main_icon = self.get_plugin_setting_add_hint(
+            self.main_icon = self.get_plugin_setting_add_hint(
                 ["main_icon"],
                 "software-update-available-symbolic",
-                "universal-update-button icon",
+                "Icon of the update button in the clock popover's sidebar.",
             )
-            self.trigger_button.add_css_class("universal-update-button")
-            self.trigger_button.set_icon_name(main_icon)
-            self.gtk_helper.add_cursor_effect(self.trigger_button)
-            self.trigger_button.connect("clicked", self._on_button_clicked)
-
-            self.plugins["status_notifier"].tray_box.append(self.trigger_button)
-            self.main_widget = (self.trigger_button, "append")
+            if "calendar" not in self.plugins:
+                self.logger.error(
+                    "Calendar plugin is not loaded. Cannot add Universal Update page."
+                )
+                return False
+            self.calendar = self.plugins["calendar"]
             self.update_count = 0
             self.is_checking = False
             self.terminal_pid = None
@@ -125,19 +121,18 @@ def get_plugin_class():
             return False
 
         def on_start(self):
+            self.calendar = None
+            self.trigger_button = None
             self.glib.timeout_add_seconds(10, self.delay_on_start)
 
         def _setup_popover(self):
-            """Constructs the GTK popover menu containing status info and action buttons."""
+            """Constructs the page with status info and action buttons and adds it to the clock popover."""
             self.popover_box = self.gtk.Box(
                 orientation=self.gtk.Orientation.VERTICAL, spacing=8
             )
-            self.popover = self.create_popover(
-                parent_widget=self.trigger_button,
-                css_class="universal-update-popover",
-                visible_handler=self._on_popover_visibility_changed,
-            )
-            self.popover.set_child(self.popover_box)
+            self.popover_box.add_css_class("universal-update-popover")
+            for side in ["top", "bottom", "start", "end"]:
+                getattr(self.popover_box, f"set_margin_{side}")(10)
             self.count_label = self.gtk.Label(label="Initializing...")
             self.popover_box.append(self.count_label)
             refresh_btn = self.gtk.Button(label="Refresh")
@@ -149,18 +144,26 @@ def get_plugin_class():
             update_btn.add_css_class("universal-update-now")
             update_btn.connect("clicked", self._launch_terminal)
             self.popover_box.append(update_btn)
+            added = self.calendar.add_page(
+                PAGE_ID,
+                [self.main_icon, "software-update-available-symbolic"],
+                "Updates",
+                self.popover_box,
+                on_show=self._on_page_show,
+            )
+            if added:
+                self.trigger_button = self.calendar.pages[PAGE_ID]["button"]
+                self.trigger_button.add_css_class("universal-update-button")
 
-        def _on_button_clicked(self, _):
-            """Toggles the visibility of the update popover when the main button is clicked."""
-            if self.popover.get_visible():
-                self.popover.popdown()
-            else:
-                self.popover.popup()
+        def _on_page_show(self):
+            """Triggers a refresh of the update count when the page becomes visible."""
+            self.run_in_async_task(self._manual_refresh())
 
-        def _on_popover_visibility_changed(self, popover, _):
-            """Triggers a refresh of the update count when the popover becomes visible."""
-            if popover.get_property("visible"):
-                self.run_in_async_task(self._manual_refresh())
+        def on_disable(self):
+            """Takes the page out of the clock popover."""
+            if self.calendar:
+                self.calendar.remove_page(PAGE_ID)
+            self.trigger_button = None
 
         async def _manual_refresh(self):
             """Performs an asynchronous update check, preventing concurrent polling operations."""
@@ -202,12 +205,16 @@ def get_plugin_class():
             Args:
                 count (int): Number of updates found, or -1 for error.
             """
+            if self.trigger_button is None:
+                return
             if count == -1:
                 self.count_label.set_label("Backend Error")
                 self.trigger_button.show()
             elif count == 0:
                 self.count_label.set_label("System up to date")
                 self.trigger_button.hide()
+                if self.calendar.current_page == PAGE_ID:
+                    self.calendar.show_page(self.calendar.CALENDAR_PAGE)
             else:
                 self.count_label.set_label(f"{count} updates available")
                 self.trigger_button.show()
@@ -229,7 +236,7 @@ def get_plugin_class():
                 )
             except Exception as e:
                 self.logger.exception(f"Launch error: {e}")
-            self.popover.popdown()
+            self.calendar.popover_calendar.popdown()
 
         def _monitor_terminal(self):
             """Monitors the terminal process PID and refreshes status once the process exits.

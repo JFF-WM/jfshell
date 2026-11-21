@@ -3,11 +3,7 @@
 /* ---------- the bar ---------- */
 
 .dock-taskbar {
-  padding: 5px 9px;
   border-radius: 20px;
-
-  background-image: none;
-  background-color: rgba(12, 12, 14, 0.88);
   background-color: color-mix(
     in srgb,
     color-mix(in srgb, var(--primary-bg, #121214) 65%, #070709 35%) 88%,
