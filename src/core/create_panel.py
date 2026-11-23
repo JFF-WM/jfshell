@@ -154,6 +154,11 @@ def setup_layer_shell(
 
     window.set_size_request(10, 10)
     window.add_css_class(class_style)
+    window.add_css_class(f"{class_style}-window")
+
+    # The theme's `background` class paints an opaque rectangle behind the window.
+    if class_style == "bottom-panel":
+        window.remove_css_class("background")
 
 
 def CreatePanel(

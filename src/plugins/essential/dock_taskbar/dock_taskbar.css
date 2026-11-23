@@ -3,7 +3,7 @@
 /* ---------- the bar ---------- */
 
 .dock-taskbar {
-  border-radius: 20px;
+  border-radius: 10px;
   background-color: color-mix(
     in srgb,
     color-mix(in srgb, var(--primary-bg, #121214) 65%, #070709 35%) 88%,

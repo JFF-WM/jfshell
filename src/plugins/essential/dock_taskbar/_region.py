@@ -9,9 +9,17 @@ makes that rectangle the blurred area; ``blur { layer-radius N }`` in the jff
 config, with N the corner radius of the dock, then rounds its corners.
 
 As a side effect the clicks around the dock go to the windows behind the panel.
+
+On the bottom panel the rectangle is that of ``bottom-panel-box-full``, the one box
+of the panel, which is also the box the CSS rounds, so the blur and the visible
+shape are the same rectangle. Anywhere else it is the dock itself.
 """
 
 import math
+
+
+# The one box of the bottom panel (see ``panels/bottom_panel.py``).
+PANEL_BOX_CLASS = "bottom-panel-box-full"
 
 
 def region_rect(bounds, size):
@@ -82,7 +90,7 @@ class DockTaskbarRegion:
         if surface is None:
             return
         self._follow(surface)
-        found, rect = dock.compute_bounds(window)
+        found, rect = self._target().compute_bounds(window)
         if not found:
             return
         region = region_rect(
@@ -93,6 +101,15 @@ class DockTaskbarRegion:
             return
         self._rect = region
         self._set(surface, region)
+
+    def _target(self):
+        """The widget whose rectangle takes the input: the panel's box, else the dock."""
+        node = self.plugin.dock.get_parent()
+        while node is not None:
+            if node.has_css_class(PANEL_BOX_CLASS):
+                return node
+            node = node.get_parent()
+        return self.plugin.dock
 
     def _follow(self, surface):
         """Updates again whenever the window changes size (apps come and go)."""

@@ -16,7 +16,7 @@ def get_plugin_class():
     class BottomPanelPlugin(BasePlugin):
         def __init__(self, panel_instance):
             """
-            Initialize the BottomPanelPlugin with identical structure to Top Panel.
+            Initialize the BottomPanelPlugin.
             """
             super().__init__(panel_instance)
             self._deferred_widgets_attached = False
@@ -26,181 +26,49 @@ def get_plugin_class():
             self._setup_panel_boxes()
             self.add_css_class()
             self.plugins["css_generator"].install_css("bottom-panel.css")
-            # Plugins fill the side boxes while they load, so look again a bit later.
-            self.glib.timeout_add(1000, self._sync_side_boxes)
-            self.glib.timeout_add(4000, self._sync_side_boxes)
-
-        def _has_content(self, widget, placeholders):
-            """True when ``widget`` holds something besides the empty placeholder boxes."""
-            child = widget.get_first_child()
-            while child is not None:
-                if child not in placeholders or self._has_content(child, placeholders):
-                    return True
-                child = child.get_next_sibling()
-            return False
-
-        def _sync_side_boxes(self):
-            """Hide the left and right boxes while nothing is in them.
-
-            With a panel width of -1 the window is as wide as its content, so an
-            empty side box (its spacer, padding and margin) only widens the window,
-            and the blur behind it, beyond the dock.
-            """
-            placeholders = {
-                self.spacer,
-                self.obj.bottom_panel_box_widgets_left,
-                self.obj.bottom_panel_box_systray,
-                self.obj.bottom_panel_box_for_buttons,
-                self.obj.bottom_panel_box_right,
-            }
-            self.obj.bottom_panel_box_left.set_visible(
-                self._has_content(self.obj.bottom_panel_box_left, placeholders)
-            )
-            self.obj.bottom_panel_grid_right.set_visible(
-                self._has_content(self.obj.bottom_panel_grid_right, placeholders)
-            )
-            return False
-
-        def _attach_widget_to_grid_next_to(
-            self, grid, widget_to_attach, relative_widget, position_type, width, height
-        ):
-            if widget_to_attach.get_parent() is None:
-                grid.attach_next_to(
-                    widget_to_attach,
-                    relative_widget,
-                    position_type,
-                    width,
-                    height,
-                )
 
         def _setup_panel_boxes(self):
-            # Left Box Setup (Symmetrical to Top)
-            self.obj.bottom_panel_box_widgets_left = self.gtk.Box.new(
-                self.gtk.Orientation.HORIZONTAL, 6
-            )
-            self.obj.bottom_panel_box_left = self.gtk.Box.new(
-                self.gtk.Orientation.HORIZONTAL, 0
-            )
-            self.obj.bottom_panel_box_widgets_left.set_homogeneous(True)
-            self.obj.bottom_panel_box_left.append(
-                self.obj.bottom_panel_box_widgets_left
-            )
+            """Build the bottom panel out of one box, ``bottom_panel_box_full``.
 
-            # Right Box & Systray Setup (Symmetrical to Top)
-            self.obj.bottom_panel_box_systray = self.gtk.Box()
-            self.obj.bottom_panel_box_for_buttons = self.gtk.Box()
-            self.obj.bottom_panel_box_right = self.gtk.Box()
+            The top panel splits its window in left, center and right boxes. The
+            bottom panel does not: a box inside another box paints its own square
+            corners over the rounded one, so a rounded dock was never possible. Here
+            the window holds a single box, centered, that is as wide as what the
+            plugins put in it, and that one box can be rounded.
 
-            self.spacer = self.gtk.Separator(
-                orientation=self.gtk.Orientation.HORIZONTAL
-            )
-            self.spacer.set_hexpand(True)
-            self.spacer.add_css_class("bottom-right-box-spacer")
-            self.obj.bottom_panel_box_right.append(self.spacer)
+            There is no ScrolledWindow wrapper either: the box is handed to the
+            window directly, so nothing clips or scrolls it.
 
-            self.obj.bottom_panel_grid_right = self.gtk.Grid()
-            self.obj.bottom_panel_grid_right.attach(
-                self.obj.bottom_panel_box_right, 1, 0, 1, 2
-            )
+            Every other name a plugin may ask for (``bottom-panel-left``,
+            ``bottom-panel-center``, ``bottom-panel-right`` and the rest) is the
+            same box, so plugins keep working; they are placed in the order they
+            load instead of in a side.
+            """
+            box = self.gtk.Box.new(self.gtk.Orientation.HORIZONTAL, 0)
+            box.set_halign(self.gtk.Align.CENTER)
+            box.set_valign(self.gtk.Align.CENTER)
+            box.set_hexpand(False)
+            box.set_focus_on_click(False)
+            self.obj.bottom_panel_box_full = box
 
-            self._attach_widget_to_grid_next_to(
-                self.obj.bottom_panel_grid_right,
-                self.obj.bottom_panel_box_systray,
-                self.obj.bottom_panel_box_right,
-                self.gtk.PositionType.RIGHT,
-                1,
-                2,
-            )
-            self._attach_widget_to_grid_next_to(
-                self.obj.bottom_panel_grid_right,
-                self.obj.bottom_panel_box_for_buttons,
-                self.obj.bottom_panel_box_systray,
-                self.gtk.PositionType.RIGHT,
-                1,
-                2,
-            )
+            for name in (
+                "left",
+                "widgets_left",
+                "center",
+                "right",
+                "systray",
+                "for_buttons",
+            ):
+                setattr(self.obj, f"bottom_panel_box_{name}", box)
 
-            # Center Box Setup (Symmetrical to Top)
-            self.obj.bottom_panel_box_center = self.gtk.Box()
-            self.obj.bottom_panel_box_center.set_halign(self.gtk.Align.CENTER)
-            self.obj.bottom_panel_box_center.set_valign(self.gtk.Align.CENTER)
-            self.obj.bottom_panel_box_center.set_hexpand(False)
-
-            # Main Grid Assembly (Symmetrical to Top)
-            self.obj.bottom_panel_box_full = self.gtk.Grid()
-
-            # Disable column homogeneity to allow children (like Taskbar)
-            # to keep their natural width instead of forcing 33%/33%/33% split.
-            self.obj.bottom_panel_box_full.set_column_homogeneous(False)
-
-            # Left side: Fixed width or takes minimal space
-            self.obj.bottom_panel_box_left.set_hexpand(False)
-            self.obj.bottom_panel_box_full.attach(
-                self.obj.bottom_panel_box_left, 0, 0, 1, 1
-            )
-
-            # Center side: Takes all remaining space to keep Taskbar centered
-            self.obj.bottom_panel_box_center.set_hexpand(True)
-            self.obj.bottom_panel_box_full.attach_next_to(
-                self.obj.bottom_panel_box_center,
-                self.obj.bottom_panel_box_left,
-                self.gtk.PositionType.RIGHT,
-                1,
-                1,
-            )
-
-            # Right side: Fixed width or takes minimal space
-            self.obj.bottom_panel_grid_right.set_hexpand(False)
-            self.obj.bottom_panel_box_full.attach_next_to(
-                self.obj.bottom_panel_grid_right,
-                self.obj.bottom_panel_box_center,
-                self.gtk.PositionType.RIGHT,
-                1,
-                1,
-            )
-
-            # Scrolled Window Wrapper (Symmetrical to Top)
-            self.obj.bottom_panel_scrolled_window = self.gtk.ScrolledWindow()
-            self.obj.bottom_panel_scrolled_window.set_policy(
-                self.gtk.PolicyType.AUTOMATIC, self.gtk.PolicyType.NEVER
-            )
-            # The window is as wide as its content when the panel width is -1.
-            self.obj.bottom_panel_scrolled_window.set_propagate_natural_width(True)
-            self.obj.bottom_panel_scrolled_window.set_child(
-                self.obj.bottom_panel_box_full
-            )
-            self.obj.bottom_panel_scrolled_window.set_focus_on_click(False)
-
-            self.main_widget = (self.obj.bottom_panel_scrolled_window, "set_child")
+            self.main_widget = (box, "set_child")
             self.is_bottom_panel_ready = True
 
         def add_css_class(self):
-            widgets = [
-                self.obj.bottom_panel_box_left,
-                self.obj.bottom_panel_box_widgets_left,
-                self.obj.bottom_panel_box_right,
-                self.obj.bottom_panel_box_systray,
-                self.obj.bottom_panel_box_center,
-                self.obj.bottom_panel_box_full,
-                self.obj.bottom_panel_scrolled_window,
-            ]
+            box = self.obj.bottom_panel_box_full
 
-            if all(self.gtk_helper.is_widget_ready(w) for w in widgets):
-                self.obj.bottom_panel_box_left.add_css_class("bottom-panel-box-left")
-                self.obj.bottom_panel_box_widgets_left.add_css_class(
-                    "bottom-panel-box-widgets-left"
-                )
-                self.obj.bottom_panel_box_right.add_css_class("bottom-panel-box-right")
-                self.obj.bottom_panel_box_systray.add_css_class(
-                    "bottom-panel-box-systray"
-                )
-                self.obj.bottom_panel_box_center.add_css_class(
-                    "bottom-panel-box-center"
-                )
-                self.obj.bottom_panel_box_full.add_css_class("bottom-panel-box-full")
-                self.obj.bottom_panel_scrolled_window.add_css_class(
-                    "bottom-panel-scrolled-window"
-                )
+            if self.gtk_helper.is_widget_ready(box):
+                box.add_css_class("bottom-panel-box-full")
                 return False
             else:
                 self.glib.idle_add(self.add_css_class)

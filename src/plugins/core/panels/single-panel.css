@@ -37,7 +37,10 @@
 }
 
 .single-panel button:hover {
-  background-color: var(--color-bg-button-flat-hover, var(--color-bg-transparent-active));
+  background-color: var(
+    --color-bg-button-flat-hover,
+    var(--color-bg-transparent-active)
+  );
   border-color: var(--color-separator-line);
 }
 
