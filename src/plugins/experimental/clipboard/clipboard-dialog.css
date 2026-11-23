@@ -1,0 +1,137 @@
+/* Clipboard dialog: sidebar with the history, detail pane with the preview. */
+
+window.clipboard-dialog {
+  background: transparent;
+  box-shadow: none;
+  border: none;
+}
+
+.clipboard-dialog-box {
+  background-color: var(--primary-bg, #282522);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+}
+
+.clipboard-dialog-sidebar {
+  padding: 18px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.clipboard-dialog-detail {
+  padding: 18px;
+}
+
+.clipboard-dialog-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--theme-status-accent, #e6dec8);
+}
+
+.clipboard-dialog-subtitle {
+  font-size: 12px;
+  opacity: 0.65;
+}
+
+.clipboard-dialog-search {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+
+.clipboard-dialog-listbox {
+  background: transparent;
+}
+
+.clipboard-dialog-row {
+  padding: 8px 10px;
+  margin: 2px 0;
+  border-radius: 12px;
+  background: transparent;
+}
+
+.clipboard-dialog-row:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.clipboard-dialog-row:selected {
+  background-color: var(--theme-status-accent, #e6dec8);
+}
+
+.clipboard-dialog-row-title {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.clipboard-dialog-row-subtitle {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.clipboard-dialog-icon-text {
+  color: var(--theme-status-accent, #e6dec8);
+}
+
+.clipboard-dialog-thumb {
+  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.clipboard-dialog-row:selected .clipboard-dialog-row-title,
+.clipboard-dialog-row:selected .clipboard-dialog-row-subtitle,
+.clipboard-dialog-row:selected .clipboard-dialog-icon-text,
+.clipboard-dialog-row:selected .clipboard-dialog-row-pin {
+  color: #ffffff;
+  opacity: 1;
+}
+
+.clipboard-dialog-button {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 10px;
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: none;
+}
+
+.clipboard-dialog-button:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.clipboard-dialog-button.pinned {
+  background-color: var(--theme-status-accent, #e6dec8);
+  border-color: transparent;
+}
+
+.clipboard-dialog-button.danger {
+  background-color: var(--clipboard-danger, #7a7268);
+  border-color: transparent;
+}
+
+.clipboard-dialog-button.danger:hover {
+  background-color: color-mix(
+    in srgb,
+    var(--clipboard-danger, #7a7268) 85%,
+    white
+  );
+}
+
+.clipboard-dialog-button.danger image,
+.clipboard-dialog-button.pinned image {
+  color: #ffffff;
+}
+
+.clipboard-dialog-preview {
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+}
+
+.clipboard-dialog-preview text,
+.clipboard-dialog-text {
+  background: transparent;
+  font-size: 13px;
+}

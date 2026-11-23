@@ -48,6 +48,7 @@ def verify_db(panel_instance):
 
 def get_plugin_class():
     import os
+    import time
     import hashlib
     from gi.repository import Gdk, GdkPixbuf
     from urllib.parse import unquote, urlparse
@@ -59,6 +60,7 @@ def get_plugin_class():
         def __init__(self, panel_instance):
             super().__init__(panel_instance)
             self.last_clipboard_content = ""
+            self._self_copy = None
             self.db_path = self.path_handler.get_data_path(
                 "db/clipboard/clipboard_server.db"
             )
@@ -78,7 +80,31 @@ def get_plugin_class():
                 self.clipboard = display.get_clipboard()
                 self.clipboard.connect("changed", self._on_clipboard_changed)
 
+        def mark_self_copy(self, content, window=1.5):
+            """Tell the server that the next clipboard change is the client copying
+            history item ``content``, so it is not captured again as a new item."""
+            self._self_copy = (content, time.monotonic() + window)
+
+        def _self_copy_origin(self):
+            if self._self_copy and time.monotonic() < self._self_copy[1]:
+                return self._self_copy[0]
+            self._self_copy = None
+            return None
+
+        async def touch_item(self, content):
+            """Move an existing item to the top of the history."""
+            async with self.aiosqlite.connect(self.db_path) as db:
+                await db.execute(
+                    "UPDATE clipboard_items SET timestamp = CURRENT_TIMESTAMP WHERE content = ?",
+                    (content,),
+                )
+                await db.commit()
+
         def _on_clipboard_changed(self, clipboard):
+            origin = self._self_copy_origin()
+            if origin is not None:
+                self.run_in_async_task(self.touch_item(origin))
+                return
             formats = clipboard.get_formats()
             if formats.contain_gtype(Gdk.Texture.__gtype__):
                 clipboard.read_texture_async(None, self._on_image_read_ready)
@@ -196,7 +222,9 @@ def get_plugin_class():
         async def get_items(self, limit=100):
             async with self.aiosqlite.connect(self.db_path) as db:
                 cursor = await db.execute(
-                    "SELECT id, content, label, is_pinned, thumbnail FROM clipboard_items ORDER BY is_pinned DESC, timestamp DESC LIMIT ?",
+                    "SELECT id, content, label, is_pinned, thumbnail, "
+                    "CAST(strftime('%s', timestamp) AS INTEGER) "
+                    "FROM clipboard_items ORDER BY is_pinned DESC, timestamp DESC LIMIT ?",
                     (limit,),
                 )
                 return await cursor.fetchall()

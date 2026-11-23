@@ -4,29 +4,22 @@ class Helpers:
 
     def apply_hints(self):
         self.parent.add_hint(
-            ["The minimum width (in pixels) of the clipboard history popover."],
-            [
-                "client",
-                "popover_min_width",
-            ],
+            ["The width (in pixels) of the clipboard dialog."],
+            ["client", "dialog_width"],
+        )
+        self.parent.add_hint(
+            ["The height (in pixels) of the clipboard dialog."],
+            ["client", "dialog_height"],
+        )
+        self.parent.add_hint(
+            ["The size (in pixels) of the image thumbnails in the history list."],
+            ["client", "row_thumbnail_size"],
         )
         self.parent.add_hint(
             [
-                "The maximum height (in pixels) of the clipboard history popover. The list will scroll if content exceeds this height."
+                "The maximum number of characters shown in the detail preview of a text entry. Longer entries are cut with '...' in the preview only."
             ],
-            [
-                "client",
-                "popover_max_height",
-            ],
-        )
-        self.parent.add_hint(
-            [
-                "The maximum size (width/height in pixels) for image thumbnails displayed in the history."
-            ],
-            [
-                "client",
-                "thumbnail_size",
-            ],
+            ["client", "preview_max_chars"],
         )
         self.parent.add_hint(
             [
@@ -90,13 +83,4 @@ class Helpers:
                 "server",
                 "monitor_interval",
             ],
-        )
-
-        self.parent.add_hint(
-            ["The maximum size for image thumbnails."],
-            ["client", "thumbnail_size"],
-        )
-        self.parent.add_hint(
-            ["The fixed height for rows containing images."],
-            ["client", "image_row_height"],
         )
