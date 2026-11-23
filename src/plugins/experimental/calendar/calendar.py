@@ -8,7 +8,7 @@ def get_plugin_metadata(_):
     return {
         "id": "org.jfshell.plugin.calendar",
         "name": "Calendar",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "enabled": True,
         "priority": 1,
         "deps": ["clock", "css_generator"],
@@ -177,6 +177,22 @@ def get_plugin_class():
             page["button"].set_active(True)
             self.activate_page(page_id)
 
+        def open_page(self, page_id) -> None:
+            """
+            Open the popover on a page, for plugins with their own panel button.
+            When the popover is already open on that page it closes instead.
+            """
+            if self.popover_calendar is None or page_id not in self.pages:
+                return
+            if self.popover_calendar.get_visible():
+                if self.current_page == page_id:
+                    self.popover_calendar.popdown()
+                else:
+                    self.show_page(page_id)
+                return
+            self.pending_page = page_id
+            self.popover_calendar.popup()
+
         def on_sidebar_toggled(self, button, page_id) -> None:
             """A sidebar button changed: only the button that became active acts."""
             if button.get_active():
@@ -212,7 +228,12 @@ def get_plugin_class():
             if not popover.get_visible():
                 self.run_page_hook(self.current_page, "on_hide")
                 return
-            if not self.remember_page and self.current_page != self.CALENDAR_PAGE:
+            target, self.pending_page = self.pending_page, None
+            if target in self.pages and target != self.current_page:
+                self.show_page(target)
+            elif target in self.pages:
+                self.run_page_hook(target, "on_show")
+            elif not self.remember_page and self.current_page != self.CALENDAR_PAGE:
                 self.show_page(self.CALENDAR_PAGE)
             else:
                 self.run_page_hook(self.current_page, "on_show")
@@ -225,6 +246,7 @@ def get_plugin_class():
             self.calendar = None
             self.pages = {}
             self.current_page = None
+            self.pending_page = None
             self.sidebar_group = None
             self.add_hint(
                 [

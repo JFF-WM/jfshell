@@ -1,35 +1,38 @@
-def get_plugin_metadata(panel):
-    id = "org.jfshell.plugin.advanced_volume"
-    container, id = panel.config_handler.get_plugin_container("top-panel-systray", id)
+def get_plugin_metadata(_):
     return {
-        "id": id,
+        "id": "org.jfshell.plugin.advanced_volume",
         "name": "Advanced Volume Control",
-        "version": "2.0.3",
-        "deps": ["css_generator"],
-        "index": 11,
-        "container": container,
+        "version": "3.0.0",
+        "deps": ["css_generator", "calendar"],
         "enabled": True,
-        "description": "Professional audio manager with clean scrollbar gutters.",
+        "description": (
+            "Professional audio manager. Adds an Audio page to the clock popover. "
+            "Enable the wayaudio_icon plugin for a systray icon that opens it."
+        ),
     }
 
 
 def get_plugin_class():
     from src.plugins.core._base import BasePlugin
-    from gi.repository import Gtk
+    from gi.repository import GLib, Gtk
     import pulsectl
     import soundcard as sc
-    from collections import defaultdict
+    from functools import partial
+
+    PAGE_ID = "wayaudio"
 
     class AdvancedVolumePlugin(BasePlugin):
         def on_start(self):
             """Initializes the PulseAudio controller and registers settings hints."""
             self.pulse = pulsectl.Pulse("jfshell-volume-mgr")
             self.sc = sc
-            self.popover = None
+            self.calendar = None
+            self.sw = None
             self.show_ignored = False
 
             if "css_generator" in self.plugins:
                 self.plugins["css_generator"].install_css("wayaudio.css")
+                self.plugins["css_generator"].install_css("wayaudio-cards.css")
 
             self.max_name_lenght = self.get_plugin_setting_add_hint(
                 ["name_lenght"], 35, "Maximum character length for device names."
@@ -44,30 +47,31 @@ def get_plugin_class():
                 ["ignored_streams"], [], "List of application names currently hidden."
             )
 
-            self.btn = Gtk.Button()
-            self.btn.add_css_class("volume-panel-button")
-            self.btn.set_icon_name("audio-volume-high-symbolic")
-            self.btn.connect("clicked", self.toggle_popover)
-            self.add_cursor_effect(self.btn)
-            self.main_widget = (self.btn, "append")
+            self.init_page()
 
-        def toggle_popover(self, *_):
-            """Toggles the visibility of the advanced audio dashboard."""
-            if not self.popover:
-                # use_scrolled=True returns (popover, scrolled_window, listbox)
-                self.popover, self.sw, _ = self.create_popover(  # pyright: ignore
-                    parent_widget=self.btn,
-                    css_class="volume-popover-root",
-                    use_scrolled=True,
-                    max_height=600,
-                    min_width=380,
+        def init_page(self) -> None:
+            """Build the audio page and add it to the clock popover's sidebar."""
+            if "calendar" not in self.plugins:
+                self.logger.error(
+                    "Calendar plugin is not loaded. Cannot add the audio page."
                 )
-                # Force the scrollbar to occupy its own space (Non-overlay)
-                if self.sw:
-                    self.sw.set_overlay_scrolling(False)
-
-            self.update_ui()
-            self.popover.popup()
+                return
+            self.calendar = self.plugins["calendar"]
+            self.sw = Gtk.ScrolledWindow()
+            self.sw.add_css_class("volume-popover-root")
+            self.sw.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+            self.sw.set_propagate_natural_height(True)
+            self.sw.set_max_content_height(600)
+            self.sw.set_min_content_width(380)
+            # Force the scrollbar to occupy its own space (Non-overlay)
+            self.sw.set_overlay_scrolling(False)
+            self.calendar.add_page(
+                PAGE_ID,
+                ["audio-volume-high-symbolic"],
+                "Audio",
+                self.sw,
+                on_show=self.update_ui,
+            )
 
         def _get_filtered_devices(self, is_mic=False):
             """Filters devices based on the user-defined blacklist."""
@@ -77,130 +81,184 @@ def get_plugin_class():
 
         def update_ui(self):
             """Rebuilds the UI structure and synchronizes current system devices."""
-            root_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+            root_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
             root_box.add_css_class("volume-content-wrapper")
+            root_box.set_margin_start(12)
+            root_box.set_margin_end(12)
+            root_box.set_margin_top(12)
+            root_box.set_margin_bottom(12)
 
             s_info = self.pulse.server_info()
             curr_sink_name = s_info.default_sink_name  # pyright: ignore
             curr_source_name = s_info.default_source_name  # pyright: ignore
 
-            # --- DEVICE ROUTING ---
-            routing_header = Gtk.Button()
-            routing_header.add_css_class("volume-section-toggle-header")
-            r_head_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            rlbl = Gtk.Label(
-                label="Device Routing", xalign=0, css_classes=["volume-header-text"]
+            # --- OUTPUT / INPUT CARDS ---
+            cards = Gtk.Box(
+                orientation=Gtk.Orientation.HORIZONTAL, spacing=12, homogeneous=True
             )
-            r_head_box.append(rlbl)
-            r_icon = Gtk.Image(icon_name="pan-down-symbolic")
-            r_head_box.append(r_icon)
-            routing_header.set_child(r_head_box)
-
-            routing_header.add_css_class("volume-section-toggle-header")
-            routing_header.set_margin_top(
-                8
-            )  # Adds space at the very top of the popover
-
-            routing_revealer = Gtk.Revealer()
-            routing_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
-            routing_header.connect(
-                "clicked",
-                lambda _: routing_revealer.set_reveal_child(
-                    not routing_revealer.get_reveal_child()
-                ),
-            )
-            routing_revealer.add_css_class("routing-revealer")
-
-            routing_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-            routing_box.set_margin_start(12)
-            routing_box.set_margin_end(12)
-            routing_box.set_margin_top(10)
-            routing_box.set_margin_bottom(12)
-
-            speakers = self._get_filtered_devices(is_mic=False)
-            s_model = Gtk.StringList.new(
-                [s.name[: self.max_name_lenght] for s in speakers]
-            )
-            s_drop = Gtk.DropDown.new(s_model, None)
-            s_drop.add_css_class("volume-device-dropdown")
-            active_sink_idx = next(
-                (i for i, s in enumerate(speakers) if s.id in curr_sink_name), 0
-            )
-            s_drop.set_selected(active_sink_idx)
-            s_drop.connect(
-                "notify::selected-item",
-                lambda d, _: self.run_cmd(
-                    f"pactl set-default-sink {speakers[d.get_selected()].id}"
-                ),
-            )
-
-            mics = self._get_filtered_devices(is_mic=True)
-            m_model = Gtk.StringList.new([m.name[: self.max_name_lenght] for m in mics])
-            m_drop = Gtk.DropDown.new(m_model, None)
-            m_drop.add_css_class("volume-device-dropdown")
-            active_source_idx = next(
-                (i for i, m in enumerate(mics) if m.id in curr_source_name), 0
-            )
-            m_drop.set_selected(active_source_idx)
-            m_drop.connect(
-                "notify::selected-item",
-                lambda d, _: self.run_cmd(
-                    f"pactl set-default-source {mics[d.get_selected()].id}"
-                ),
-            )
-
-            routing_box.append(
-                Gtk.Label(
-                    label="Output Device",
-                    xalign=0,
-                    css_classes=["volume-app-name-label"],
+            cards.append(
+                self._build_device_card(
+                    "Output",
+                    self._get_filtered_devices(is_mic=False),
+                    self._lookup(self.pulse.get_sink_by_name, curr_sink_name),
+                    curr_sink_name,
+                    is_mic=False,
                 )
             )
-            routing_box.append(s_drop)
-            routing_box.append(
-                Gtk.Label(
-                    label="Input Device",
-                    xalign=0,
-                    css_classes=["volume-app-name-label"],
+            cards.append(
+                self._build_device_card(
+                    "Input",
+                    self._get_filtered_devices(is_mic=True),
+                    self._lookup(self.pulse.get_source_by_name, curr_source_name),
+                    curr_source_name,
+                    is_mic=True,
                 )
             )
-            routing_box.append(m_drop)
-            routing_revealer.set_child(routing_box)
-
-            root_box.append(routing_header)
-            root_box.append(routing_revealer)
-
-            # --- SYSTEM MASTER ---
-            master_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-            master_box.add_css_class("volume-section-master")
-            master_box.set_margin_start(12)
-            master_box.set_margin_end(12)
-            master_box.set_margin_top(12)
-            master_box.set_margin_bottom(12)
-
-            mlbl = Gtk.Label(
-                label="System Volume", xalign=0, css_classes=["volume-header-text"]
-            )
-            master_box.append(mlbl)
-            sink = self.pulse.get_sink_by_name(curr_sink_name)
-            master_box.append(
-                self.create_volume_row(sink, is_sink=True, type_class="master")
-            )
-            root_box.append(master_box)
-            root_box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+            root_box.append(cards)
 
             # --- APPLICATIONS ---
+            root_box.append(self._build_apps_card(curr_sink_name))
+            if self.sw:
+                self.sw.set_child(root_box)
+
+        def _lookup(self, getter, name):
+            """Returns ``getter(name)`` or None when PulseAudio has no such object."""
+            try:
+                return getter(name)
+            except pulsectl.PulseError:
+                return None
+
+        def _refresh_later(self) -> None:
+            """Rebuild the page shortly after an action, once the popover has closed
+            and asynchronous pactl commands had a moment to apply."""
+            GLib.timeout_add(200, self._refresh_once)
+
+        def _refresh_once(self) -> bool:
+            try:
+                self.update_ui()
+            except Exception as e:
+                self.logger.error(f"Audio page refresh failed: {e}")
+            return GLib.SOURCE_REMOVE
+
+        def _build_choice_button(
+            self, icon_name: str, choices: list, css_classes: list[str]
+        ) -> Gtk.MenuButton:
+            """Icon button that opens a popover list.
+
+            ``choices`` holds ``(label, checked, callback)`` tuples; ``None`` adds a
+            separator.
+            """
+            btn = Gtk.MenuButton(css_classes=css_classes)
+            btn.set_icon_name(icon_name)
+            btn.set_valign(Gtk.Align.CENTER)
+
+            popover = Gtk.Popover()
+            popover.add_css_class("volume-device-popover")
+            popover.set_has_arrow(False)
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            for choice in choices:
+                if choice is None:
+                    box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+                    continue
+                label, checked, callback = choice
+                item = Gtk.Button(css_classes=["volume-device-item"])
+                item_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+                check = Gtk.Image(icon_name="object-select-symbolic", pixel_size=14)
+                check.add_css_class("volume-device-item-check")
+                check.set_opacity(1.0 if checked else 0.0)
+                item_row.append(check)
+                item_row.append(Gtk.Label(label=label, xalign=0, hexpand=True))
+                item.set_child(item_row)
+                item.connect("clicked", self._on_choice_clicked, popover, callback)
+                box.append(item)
+            popover.set_child(box)
+            btn.set_popover(popover)
+            return btn
+
+        def _on_choice_clicked(self, _btn, popover, callback) -> None:
+            popover.popdown()
+            callback()
+
+        def _build_device_card(
+            self, title: str, devices: list, audio_obj, current_name: str, is_mic: bool
+        ) -> Gtk.Box:
+            """Card with the active device, a menu to switch it and a volume row."""
+            card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            card.add_css_class("volume-device-card")
+            card.set_hexpand(True)
+
+            active_idx = next(
+                (i for i, d in enumerate(devices) if d.id in current_name), None
+            )
+            if active_idx is not None:
+                active_name = devices[active_idx].name
+            elif audio_obj is not None:
+                active_name = audio_obj.description
+            else:
+                active_name = ""
+
+            default_cmd = (
+                "pactl set-default-source" if is_mic else "pactl set-default-sink"
+            )
+            choices = [
+                (
+                    d.name[: self.max_name_lenght],
+                    i == active_idx,
+                    partial(self._set_default_device, default_cmd, d.id),
+                )
+                for i, d in enumerate(devices)
+            ]
+
+            head = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            labels = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            labels.set_hexpand(True)
+            labels.append(
+                Gtk.Label(label=title, xalign=0, css_classes=["volume-device-title"])
+            )
+            subtitle = Gtk.Label(
+                label=active_name[: self.max_name_lenght],
+                xalign=0,
+                css_classes=["volume-device-subtitle"],
+            )
+            subtitle.set_ellipsize(3)  # pyright: ignore
+            labels.append(subtitle)
+            head.append(labels)
+            if choices:
+                head.append(
+                    self._build_choice_button(
+                        "view-more-symbolic", choices, ["volume-card-menu-btn"]
+                    )
+                )
+            card.append(head)
+
+            if audio_obj is not None:
+                scale, percent_lbl, mute_btn = self.create_volume_controls(
+                    [audio_obj], is_stream=False, is_mic=is_mic, type_class="master"
+                )
+                row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+                row.add_css_class("volume-row-master")
+                row.append(scale)
+                row.append(percent_lbl)
+                row.append(mute_btn)
+                card.append(row)
+            return card
+
+        def _set_default_device(self, cmd: str, device_id: str) -> None:
+            self.run_cmd(f"{cmd} {device_id}")
+            self._refresh_later()
+
+        def _build_apps_card(self, curr_sink_name: str) -> Gtk.Box:
+            """Card listing every playback stream as one compact row."""
+            card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+            card.add_css_class("volume-apps-card")
+
             apps_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            apps_header.set_margin_start(12)
-            apps_header.set_margin_end(12)
-            apps_header.set_margin_top(12)
             albl = Gtk.Label(
-                label="Applications",
+                label="Application Volume",
                 xalign=0,
                 hexpand=True,
                 css_classes=["volume-header-text"],
             )
-
             ignore_toggle = Gtk.Button(css_classes=["volume-ignore-toggle"])
             ignore_toggle.set_icon_name(
                 "view-conceal-symbolic"
@@ -210,108 +268,139 @@ def get_plugin_class():
             ignore_toggle.connect("clicked", self._on_toggle_ignored)
             apps_header.append(albl)
             apps_header.append(ignore_toggle)
-            root_box.append(apps_header)
+            card.append(apps_header)
 
-            grouped_apps = defaultdict(list)
-            for app in self.pulse.sink_input_list():
-                app_name = app.proplist.get("application.name", "Unknown")
-                grouped_apps[app_name].append(app)
+            sinks = self.pulse.sink_list()
+            default_sink = self._lookup(self.pulse.get_sink_by_name, curr_sink_name)
+            default_idx = default_sink.index if default_sink is not None else None
 
-            apps_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-            apps_container.set_margin_start(12)
-            apps_container.set_margin_end(12)
-            apps_container.set_margin_top(12)
-            apps_container.set_margin_bottom(12)
+            # One row per application: an app can own several streams (e.g. Firefox)
+            # and they are controlled together. Active streams come first so the
+            # row shows what is actually playing.
+            grouped_apps: dict[str, list] = {}
+            for stream in self.pulse.sink_input_list():
+                app_name = stream.proplist.get("application.name", "Unknown")
+                grouped_apps.setdefault(app_name, []).append(stream)
 
+            apps_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+            shown = 0
             for app_name, streams in grouped_apps.items():
                 is_ignored = app_name in self.ignored_streams
                 if is_ignored and not self.show_ignored:
                     continue
-
-                app_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-                app_card.add_css_class("volume-app-entry")
-                if is_ignored:
-                    app_card.add_css_class("ignored")
-
-                title_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-                icon_lookup = app_name.lower().replace(" ", "-")
-                app_icon = Gtk.Image(pixel_size=24)
-                app_icon.set_from_icon_name(self.icon_exist(icon_lookup))
-
-                tlbl = Gtk.Label(
-                    label=app_name,
-                    xalign=0,
-                    hexpand=True,
-                    css_classes=["volume-app-name-label"],
+                streams.sort(key=lambda st: bool(getattr(st, "corked", 0)))
+                apps_container.append(
+                    self._build_app_row(
+                        streams, app_name, is_ignored, sinks, default_idx
+                    )
                 )
+                shown += 1
 
-                act_btn = Gtk.Button(css_classes=["volume-app-action-btn"])
-                act_btn.set_icon_name(
-                    "list-remove-symbolic"
-                    if app_name not in self.ignored_streams
-                    else "list-add-symbolic"
+            if shown == 0:
+                apps_container.append(
+                    Gtk.Label(
+                        label="No applications playing audio",
+                        css_classes=["volume-stream-title"],
+                    )
                 )
-                act_btn.connect("clicked", self._on_ignore_click, app_name)
+            card.append(apps_container)
+            return card
 
-                title_row.append(app_icon)
-                title_row.append(tlbl)
-                title_row.append(act_btn)
-                app_card.append(title_row)
+        def _build_app_row(
+            self, streams: list, app_name: str, is_ignored: bool, sinks: list, default_idx
+        ) -> Gtk.Box:
+            """One application: icon, name + media title, slider, output picker, mute."""
+            stream = streams[0]
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            row.add_css_class("volume-app-entry")
+            row.add_css_class("volume-app-row")
+            if is_ignored:
+                row.add_css_class("ignored")
 
-                for stream in streams:
-                    stream_box = Gtk.Box(
-                        orientation=Gtk.Orientation.VERTICAL, spacing=4
-                    )
-                    media_title = (
-                        stream.proplist.get("media.title")
-                        or stream.proplist.get("media.name")
-                        or "Playback Stream"
-                    )
-                    title_lbl = Gtk.Label(
-                        label=media_title, xalign=0, css_classes=["volume-stream-title"]
-                    )
-                    title_lbl.set_ellipsize(3)  # pyright: ignore
+            icon_lookup = app_name.lower().replace(" ", "-")
+            app_icon = Gtk.Image(pixel_size=32)
+            app_icon.set_from_icon_name(self.icon_exist(icon_lookup))
+            app_icon.set_valign(Gtk.Align.CENTER)
 
-                    stream_box.append(title_lbl)
-                    stream_box.append(
-                        self.create_volume_row(stream, is_sink=False, type_class="app")
-                    )
-                    stream_box.append(self.create_sink_selector(stream))
+            media_title = (
+                stream.proplist.get("media.title")
+                or stream.proplist.get("media.name")
+                or "Playback Stream"
+            )
+            scale, percent_lbl, mute_btn = self.create_volume_controls(
+                streams, is_stream=True, is_mic=False, type_class="app"
+            )
 
-                    app_card.append(stream_box)
-                    if stream != streams[-1]:
-                        app_card.append(
-                            Gtk.Separator(css_classes=["volume-stream-separator"])
-                        )
+            name_lbl = Gtk.Label(
+                label=app_name, xalign=0, css_classes=["volume-app-name-label"]
+            )
+            title_lbl = Gtk.Label(
+                label=media_title,
+                xalign=0,
+                hexpand=True,
+                css_classes=["volume-stream-title"],
+            )
+            title_lbl.set_ellipsize(3)  # pyright: ignore
+            top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            top.append(name_lbl)
+            top.append(title_lbl)
+            top.append(percent_lbl)
 
-                apps_container.append(app_card)
+            body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            body.set_hexpand(True)
+            body.append(top)
+            body.append(scale)
 
-            root_box.append(apps_container)
-            if self.sw:
-                self.sw.set_child(root_box)
+            route_btn = self.create_sink_selector(
+                streams, sinks, default_idx, app_name, is_ignored
+            )
+            mute_btn.set_valign(Gtk.Align.CENTER)
+
+            row.append(app_icon)
+            row.append(body)
+            row.append(route_btn)
+            row.append(mute_btn)
+            return row
 
         def _on_toggle_ignored(self, _):
             self.show_ignored = not self.show_ignored
             self.update_ui()
 
-        def _on_ignore_click(self, _, app_name):
+        def _toggle_ignored_app(self, app_name: str) -> None:
             if app_name in self.ignored_streams:
                 self.ignored_streams.remove(app_name)
             else:
                 self.ignored_streams.append(app_name)
             self.set_plugin_setting(["ignored_streams"], self.ignored_streams)
-            self.update_ui()
+            self._refresh_later()
 
-        def create_volume_row(self, audio_obj, is_sink=True, type_class="app"):
-            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-            row.add_css_class(f"volume-row-{type_class}")
+        def create_volume_controls(
+            self, audio_objs: list, is_stream: bool, is_mic: bool, type_class: str = "app"
+        ):
+            """Returns ``(scale, percent_label, mute_button)`` bound to ``audio_objs``.
+
+            Every object in the list is changed together; the first one provides the
+            initial state.
+            """
+            audio_obj = audio_objs[0]
+            icon_on, icon_off = (
+                ("audio-input-microphone-symbolic", "microphone-disabled-symbolic")
+                if is_mic
+                else ("audio-volume-high-symbolic", "audio-volume-muted-symbolic")
+            )
+            muted = [all(bool(o.mute) for o in audio_objs)]
 
             mute_btn = Gtk.Button(css_classes=[f"volume-mute-button-{type_class}"])
-            mute_btn.set_icon_name(
-                "audio-volume-muted-symbolic"
-                if audio_obj.mute
-                else "audio-volume-high-symbolic"
-            )
+            mute_btn.set_icon_name(icon_off if muted[0] else icon_on)
+            mute_btn.set_valign(Gtk.Align.CENTER)
+
+            def on_mute_clicked(btn):
+                muted[0] = not muted[0]
+                for obj in audio_objs:
+                    self.pulse.mute(obj, muted[0])
+                btn.set_icon_name(icon_off if muted[0] else icon_on)
+
+            mute_btn.connect("clicked", on_mute_clicked)
 
             vol_percent = int(audio_obj.volume.value_flat * 100)
             percent_lbl = Gtk.Label(
@@ -334,40 +423,64 @@ def get_plugin_class():
                 val_raw = s.get_adjustment().get_value()
                 val_norm = val_raw / 100.0
                 percent_lbl.set_label(f"{int(val_raw)}%")
-                if is_sink:
-                    self.pulse.volume_set_all_chans(audio_obj, val_norm)
-                else:
-                    self.pulse.sink_input_volume_set(
-                        audio_obj.index,
-                        pulsectl.PulseVolumeInfo(
-                            val_norm, len(audio_obj.volume.values)
-                        ),
-                    )
+                for obj in audio_objs:
+                    if is_stream:
+                        self.pulse.sink_input_volume_set(
+                            obj.index,
+                            pulsectl.PulseVolumeInfo(val_norm, len(obj.volume.values)),
+                        )
+                    else:
+                        self.pulse.volume_set_all_chans(obj, val_norm)
 
             scale.connect("value-changed", on_val_changed)
-            row.append(mute_btn)
-            row.append(scale)
-            row.append(percent_lbl)
-            return row
+            return scale, percent_lbl, mute_btn
 
-        def create_sink_selector(self, app_input):
-            sinks = self.pulse.sink_list()
-            model = Gtk.StringList.new([s.description for s in sinks])
-            dropdown = Gtk.DropDown.new(model, None)
-            dropdown.add_css_class("volume-device-dropdown")
-            current_idx = next(
-                (i for i, s in enumerate(sinks) if s.index == app_input.sink), 0
+        def create_sink_selector(
+            self, streams: list, sinks: list, default_idx, app_name: str, is_ignored: bool
+        ) -> Gtk.MenuButton:
+            """Headphones button whose popover lists the output devices for an app."""
+            stream_indexes = [st.index for st in streams]
+            on_default = default_idx is not None and all(
+                st.sink == default_idx for st in streams
             )
-            dropdown.set_selected(current_idx)
-            dropdown.connect(
-                "notify::selected-item",
-                lambda d, _: self.pulse.sink_input_move(
-                    app_input.index, sinks[d.get_selected()].index
-                ),
+            choices = []
+            if default_idx is not None:
+                choices.append(
+                    (
+                        "Default device",
+                        on_default,
+                        partial(self._move_streams, stream_indexes, default_idx),
+                    )
+                )
+                choices.append(None)
+            for s in sinks:
+                choices.append(
+                    (
+                        s.description,
+                        all(st.sink == s.index for st in streams) and not on_default,
+                        partial(self._move_streams, stream_indexes, s.index),
+                    )
+                )
+            choices.append(None)
+            choices.append(
+                (
+                    "Show application" if is_ignored else "Hide application",
+                    False,
+                    partial(self._toggle_ignored_app, app_name),
+                )
             )
-            return dropdown
+            return self._build_choice_button(
+                "audio-headphones-symbolic", choices, ["volume-app-route-btn"]
+            )
+
+        def _move_streams(self, stream_indexes: list[int], sink_index: int) -> None:
+            for index in stream_indexes:
+                self.pulse.sink_input_move(index, sink_index)
+            self._refresh_later()
 
         def on_disable(self):
+            if self.calendar:
+                self.calendar.remove_page(PAGE_ID)
             if self.pulse:
                 self.pulse.close()
 

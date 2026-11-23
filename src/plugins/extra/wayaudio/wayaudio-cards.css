@@ -1,0 +1,66 @@
+/* Cards layout for the wayaudio page: Output / Input cards and compact app rows. */
+
+.volume-device-card,
+.volume-apps-card {
+  background: alpha(currentColor, 0.05);
+  border: 1px solid alpha(currentColor, 0.12);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.volume-device-title {
+  font-weight: bold;
+  font-size: 1.1em;
+}
+
+.volume-device-subtitle {
+  opacity: 0.75;
+}
+
+.volume-card-menu-btn,
+.volume-app-route-btn {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 2px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.volume-card-menu-btn:hover,
+.volume-app-route-btn:hover {
+  background: alpha(currentColor, 0.1);
+}
+
+.volume-app-route-btn:checked {
+  background: @theme_selected_bg_color;
+  color: @theme_selected_fg_color;
+}
+
+.volume-app-row {
+  background: alpha(black, 0.25);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.volume-app-row.ignored {
+  opacity: 0.5;
+}
+
+.volume-device-popover contents {
+  padding: 6px;
+  border-radius: 10px;
+}
+
+.volume-device-item {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.volume-device-item:hover {
+  background: @theme_selected_bg_color;
+  color: @theme_selected_fg_color;
+}
