@@ -1,0 +1,350 @@
+/* Notes dialog. Same look as the clipboard dialog: a glass panel with the list
+   on the left and the selected note (or the editor) on the right.
+   Colors come from the active theme; the fallbacks only apply to themes that do
+   not define the variable. */
+
+window.notes-dialog {
+  background: transparent;
+}
+
+.notes-dialog-box {
+  background: var(--color-bg-popover, rgba(30, 28, 27, 0.96));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+}
+
+/* ---- Sidebar ------------------------------------------------------------ */
+.notes-dialog-sidebar {
+  background: rgba(0, 0, 0, 0.16);
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 20px 18px 18px 18px;
+}
+
+.notes-dialog-detail {
+  padding: 20px 24px 22px 24px;
+}
+
+.notes-dialog-title {
+  color: var(--theme-status-accent, #3ea6ff);
+  font-size: 1.2em;
+  font-weight: 800;
+}
+
+.notes-dialog-subtitle {
+  font-size: 0.85em;
+  opacity: 0.6;
+}
+
+/* ---- Buttons ------------------------------------------------------------ */
+.notes-dialog-button {
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.notes-dialog-button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.notes-dialog-button:disabled {
+  opacity: 0.35;
+}
+
+.notes-dialog-button.accent {
+  background: var(--theme-status-accent, #3ea6ff);
+  border-color: transparent;
+}
+
+.notes-dialog-button.accent image {
+  color: #ffffff;
+}
+
+.notes-dialog-button.accent:hover {
+  background: var(--theme-status-accent, #3ea6ff);
+  opacity: 0.85;
+}
+
+.notes-dialog-button.danger:hover {
+  background: rgba(255, 90, 90, 0.35);
+  border-color: rgba(255, 90, 90, 0.5);
+}
+
+.notes-dialog-text-button {
+  min-height: 34px;
+  padding: 0 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  font-weight: 700;
+  transition: background 120ms ease;
+}
+
+.notes-dialog-text-button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.notes-dialog-text-button:disabled {
+  opacity: 0.35;
+}
+
+.notes-dialog-text-button.primary,
+.notes-dialog-text-button.accent {
+  background: var(--theme-status-accent, #3ea6ff);
+  border-color: transparent;
+  color: #ffffff;
+}
+
+.notes-dialog-text-button.primary label,
+.notes-dialog-text-button.accent label {
+  color: #ffffff;
+}
+
+.notes-dialog-text-button.primary:hover,
+.notes-dialog-text-button.accent:hover {
+  opacity: 0.85;
+}
+
+.notes-dialog-text-button.danger {
+  background: rgba(255, 90, 90, 0.3);
+  border-color: rgba(255, 90, 90, 0.5);
+}
+
+.notes-dialog-text-button.danger:hover {
+  background: rgba(255, 90, 90, 0.5);
+}
+
+/* ---- Search and confirmation -------------------------------------------- */
+.notes-dialog-search {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+
+.notes-dialog-search:focus-within {
+  border-color: var(--theme-status-accent, #3ea6ff);
+}
+
+.notes-dialog-confirm {
+  padding: 8px 8px 8px 14px;
+  border-radius: 14px;
+  background: rgba(255, 90, 90, 0.12);
+  border: 1px solid rgba(255, 90, 90, 0.35);
+}
+
+.notes-dialog-confirm-label {
+  font-weight: 700;
+}
+
+/* ---- List --------------------------------------------------------------- */
+.notes-dialog-listbox {
+  background: transparent;
+}
+
+.notes-dialog-row {
+  margin: 2px 0;
+  padding: 0;
+  border-radius: 16px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.notes-dialog-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.notes-dialog-row:selected {
+  background: var(--theme-status-accent, #3ea6ff);
+}
+
+.notes-dialog-row-box {
+  padding: 9px 12px;
+}
+
+/* The lead column has a fixed size set in code: no padding or margin here, or
+   the text of image-less and icon rows would not line up. */
+.notes-dialog-lead {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.notes-dialog-row:selected .notes-dialog-lead {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.notes-dialog-icon-note {
+  color: var(--theme-status-accent, #3ea6ff);
+}
+
+.notes-dialog-row-title {
+  font-weight: 700;
+}
+
+.notes-dialog-row-subtitle {
+  font-size: 0.8em;
+  opacity: 0.65;
+}
+
+.notes-dialog-row-bell {
+  color: var(--theme-status-accent, #3ea6ff);
+}
+
+.notes-dialog-row:selected label,
+.notes-dialog-row:selected image {
+  color: #ffffff;
+}
+
+.notes-dialog-row:selected .notes-dialog-row-subtitle {
+  opacity: 0.85;
+}
+
+/* ---- Detail: view ------------------------------------------------------- */
+.notes-dialog-preview {
+  background: transparent;
+}
+
+.notes-dialog-view {
+  padding: 2px 2px 2px 0;
+}
+
+.notes-dialog-desc {
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  line-height: 1.45;
+}
+
+.notes-dialog-desc.empty {
+  opacity: 0.45;
+  font-style: italic;
+}
+
+.notes-dialog-card {
+  padding: 16px 18px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.notes-dialog-card-title {
+  font-weight: 800;
+}
+
+.notes-dialog-card-icon {
+  opacity: 0.55;
+}
+
+.notes-dialog-card-icon.active {
+  color: var(--theme-status-accent, #3ea6ff);
+  opacity: 1;
+}
+
+.notes-dialog-field-label {
+  font-size: 0.85em;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.notes-dialog-chip {
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  font-size: 0.9em;
+  transition: background 120ms ease;
+}
+
+.notes-dialog-chip:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.notes-dialog-chip.selected {
+  background: var(--theme-status-accent, #3ea6ff);
+  border-color: transparent;
+}
+
+.notes-dialog-chip.selected label {
+  color: #ffffff;
+}
+
+.notes-dialog-spin {
+  min-width: 96px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+}
+
+/* ---- Detail: editor ----------------------------------------------------- */
+.notes-dialog-entry {
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  font-size: 1.05em;
+  font-weight: 700;
+}
+
+.notes-dialog-entry:focus-within {
+  border-color: var(--theme-status-accent, #3ea6ff);
+}
+
+.notes-dialog-entry.error {
+  border-color: rgba(255, 90, 90, 0.9);
+}
+
+.notes-dialog-textarea-frame {
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.notes-dialog-textarea-frame:focus-within {
+  border-color: var(--theme-status-accent, #3ea6ff);
+}
+
+.notes-dialog-textarea,
+.notes-dialog-textarea text {
+  background: transparent;
+}
+
+.notes-dialog-placeholder {
+  opacity: 0.45;
+}
+
+/* ---- Empty state and toast ---------------------------------------------- */
+.notes-dialog-empty-icon {
+  opacity: 0.3;
+}
+
+.notes-dialog-toast {
+  padding: 6px 6px 6px 16px;
+  border-radius: 999px;
+  background: rgba(18, 18, 20, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.notes-dialog-toast-label {
+  font-weight: 600;
+}
+
+.notes-dialog-toast .notes-dialog-text-button {
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+}
