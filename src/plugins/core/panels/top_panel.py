@@ -42,8 +42,13 @@ def get_plugin_class():
 
         # ------------------------------------------------------------ design
         def _start_fit(self) -> None:
+            # One immediate pass at startup, then re-apply on a timer. The idle
+            # pass is a ONE-SHOT: a GLib callback returning True re-arms itself
+            # on every idle iteration, which spins the main loop at 100% CPU.
+            # Return False (GLib.SOURCE_REMOVE) so it runs exactly once, the
+            # 1000 ms timeout below is what keeps it re-applying afterwards.
             self._fit_timer = self.glib.timeout_add(1000, self._fit_tick)
-            self.glib.idle_add(self._fit_tick)
+            self.glib.idle_add(self._fit_tick_once)
 
         def _fit_sizes(self) -> tuple[int, int]:
             """(button, icon) sizes derived from the configured top panel height."""
@@ -62,8 +67,17 @@ def get_plugin_class():
             icon = max(min(button - 8, 16), 12)
             return button, icon
 
+        def _fit_tick_once(self):
+            """One-shot idle pass: apply sizes now, then remove the idle source."""
+            self._apply_fit()
+            return False  # GLib.SOURCE_REMOVE - do not re-arm
+
         def _fit_tick(self):
-            """Re-applies the sizes: plugins add and replace widgets at any time."""
+            """Timer callback: re-applies the sizes on a fixed cadence."""
+            self._apply_fit()
+            return True  # keep the 1000 ms timeout alive
+
+        def _apply_fit(self) -> None:
             sizes = self._fit_sizes()
             # Right side: flat square buttons. Left and center (launcher, clock):
             # keep their own look, only cap icons and drop the forced min height.
@@ -75,7 +89,6 @@ def get_plugin_class():
                 self._fit_widget(box, sizes)
             for box in (self.obj.top_panel_box_left, self.obj.top_panel_box_center):
                 self._fit_widget(box, sizes, keep_look=True)
-            return True
 
         def _has_label(self, widget) -> bool:
             child = widget.get_first_child()
