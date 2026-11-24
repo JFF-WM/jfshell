@@ -4,11 +4,12 @@ Pure logic of the global menu: no GTK, no D-Bus.
 * pick the dbusmenu address that belongs to the focused window,
 * turn a ``GetLayout`` reply into plain entries,
 * group entries into sections and clean up dbusmenu labels,
-* decide whether the bar is shown in full or collapsed into one Menu button.
+* decide whether the bar is shown in full or collapsed into one Menu button,
+* turn the GMenu of a GTK app (``org.gtk.Menus`` + ``org.gtk.Actions``) into the same entries.
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 DBUSMENU_INTERFACE = "com.canonical.dbusmenu"
 """Interface jff files the menu of a window under (xdg-dbus-annotation and KDE appmenu)."""
@@ -23,6 +24,24 @@ MENU_PROPS: List[str] = [
     "children-display",
 ]
 """Properties asked for in ``GetLayout``, the rest is of no use to a text menu."""
+
+GTK_ACTIONS_APPLICATION = "org.gtk.Actions:application"
+"""Annotation of the GApplication object, the ``menus/menubar`` and ``menus/appmenu`` objects hang off its path."""
+
+GTK_ACTIONS_WINDOW = "org.gtk.Actions:window"
+"""Annotation of the window object, where the ``win.`` actions live."""
+
+APP_ROW_KEY: Tuple[Any, ...] = ("app",)
+"""Key of the one row that stands for a whole app menu."""
+
+APP_ROW_LABEL = "Application"
+"""Label of that row."""
+
+GMenus = Dict[Tuple[int, int], List[Dict[str, Any]]]
+"""``org.gtk.Menus`` content: ``(group, menu)`` -> items, each item a dict of attributes and links."""
+
+IdOf = Callable[[Tuple[Any, ...]], int]
+"""Gives the stable row id of a key: ``(group, menu, index)`` for an item, longer or shorter for the rest."""
 
 MODES: Tuple[str, ...] = ("auto", "full", "compact")
 """How the bar is shown: ``auto`` falls back to ``compact`` when ``full`` does not fit."""
@@ -88,8 +107,20 @@ def normalize_label(label: str) -> str:
 
 
 def _unwrap(value: Any) -> Any:
-    """The python value of a dbus-fast ``Variant``, other values unchanged."""
-    return getattr(value, "value", value)
+    """The python value of a dbus-fast ``Variant``, other values unchanged.
+
+    Variants are peeled until none is left: some apps send ``v`` inside ``v``
+    (the children of a ``GetLayout`` row, a property value), and a single peel
+    would hand a ``Variant`` to code that expects a struct or a string.
+    """
+    for _ in range(16):  # bounded: never loop on a self referencing object
+        if isinstance(value, (str, bytes, int, float, bool, list, tuple, dict)):
+            return value
+        inner = getattr(value, "value", value)
+        if inner is value:
+            return value
+        value = inner
+    return value
 
 
 def _parse_node(node: Any) -> Tuple[MenuEntry, bool]:
@@ -157,3 +188,173 @@ def use_compact(mode: str, allocated_width: int, full_width: int) -> bool:
     if mode == "full":
         return False
     return allocated_width < full_width
+
+
+@dataclass(frozen=True)
+class GAction:
+    """State of one ``org.gtk.Actions`` entry."""
+
+    enabled: bool = True
+    state: Any = None
+    """Python value of the action state, None for a stateless action."""
+
+
+def select_gmenu_address(
+    annotations: Iterable[Dict[str, Any]], window_id: Optional[int]
+) -> Optional[Tuple[str, str, Optional[str]]]:
+    """``(service_name, application_path, window_path)`` of the GTK menus of ``window_id``, or None.
+
+    GTK apps do not annotate their menus, only their action groups. The menus
+    sit at ``<application_path>/menus/...`` on the same name. ``window_path`` is None
+    when the window annotated no action group of its own. The newest annotation wins.
+    """
+    if window_id is None:
+        return None
+    newest: Dict[str, Dict[str, Any]] = {}
+    for a in annotations:
+        interface = a.get("interface")
+        if interface not in (GTK_ACTIONS_APPLICATION, GTK_ACTIONS_WINDOW):
+            continue
+        if a.get("window") != window_id:
+            continue
+        if not a.get("service_name") or not a.get("object_path"):
+            continue
+        best = newest.get(interface)
+        if best is None or a["id"] > best["id"]:
+            newest[interface] = a
+    app = newest.get(GTK_ACTIONS_APPLICATION)
+    if app is None:
+        return None
+    window = newest.get(GTK_ACTIONS_WINDOW)
+    window_path = None
+    if window is not None and window["service_name"] == app["service_name"]:
+        window_path = window["object_path"]
+    return app["service_name"], app["object_path"], window_path
+
+
+def _link(item: Dict[str, Any], name: str) -> Optional[Tuple[int, int]]:
+    """``(group, menu)`` an item links to as ``:section`` or ``:submenu``, or None."""
+    value = item.get(name)
+    if value is None:
+        return None
+    group, menu = _unwrap(value)
+    return int(group), int(menu)
+
+
+def _gmenu_row(
+    menus: GMenus,
+    item: Dict[str, Any],
+    key: Tuple[Any, ...],
+    actions: Dict[str, GAction],
+    id_of: IdOf,
+    depth: int,
+) -> Optional[MenuEntry]:
+    """One non section item as an entry, None when it has no label or is hidden."""
+    label = normalize_label(str(_unwrap(item["label"]))) if "label" in item else ""
+    submenu = _link(item, ":submenu")
+    if submenu is not None:
+        children: Tuple[MenuEntry, ...] = ()
+        if depth != 1:
+            below = depth - 1 if depth > 0 else depth
+            children = tuple(gmenu_entries(menus, submenu, actions, id_of, below))
+        return MenuEntry(
+            id=id_of(key), label=label, has_submenu=True, children=children
+        )
+    if not label:
+        return None
+    name = str(_unwrap(item["action"])) if "action" in item else ""
+    action = actions.get(name)
+    hidden_when = str(_unwrap(item["hidden-when"])) if "hidden-when" in item else ""
+    if hidden_when == "action-missing" and action is None:
+        return None
+    if hidden_when == "action-disabled" and (action is None or not action.enabled):
+        return None
+    state = action.state if action is not None else None
+    target = _unwrap(item["target"]) if "target" in item else None
+    toggle, checked = "", False
+    if isinstance(state, bool):
+        toggle, checked = "checkmark", state
+    elif state is not None and target is not None:
+        toggle, checked = "radio", state == target
+    return MenuEntry(
+        id=id_of(key),
+        label=label,
+        enabled=action is not None and action.enabled,
+        toggle=toggle,
+        checked=checked,
+    )
+
+
+def gmenu_entries(
+    menus: GMenus,
+    menu: Tuple[int, int],
+    actions: Dict[str, GAction],
+    id_of: IdOf,
+    depth: int = -1,
+) -> List[MenuEntry]:
+    """Rows of one GMenu as entries, sections flattened between separators.
+
+    ``depth`` counts levels like the dbusmenu ``GetLayout``: 1 is the rows alone
+    (submenus come without children), -1 is everything below.
+    """
+    entries: List[MenuEntry] = []
+    for index, item in enumerate(menus.get(menu, [])):
+        key = (menu[0], menu[1], index)
+        section = _link(item, ":section")
+        if section is not None:
+            entries.append(
+                MenuEntry(id=id_of(key + ("before",)), label="", separator=True)
+            )
+            entries.extend(gmenu_entries(menus, section, actions, id_of, depth))
+            entries.append(
+                MenuEntry(id=id_of(key + ("after",)), label="", separator=True)
+            )
+            continue
+        row = _gmenu_row(menus, item, key, actions, id_of, depth)
+        if row is not None:
+            entries.append(row)
+    return entries
+
+
+def gmenu_top(
+    menus: GMenus, actions: Dict[str, GAction], id_of: IdOf, depth: int = -1
+) -> List[MenuEntry]:
+    """Top level rows of a GTK app's menu.
+
+    A menubar is a list of submenus and is returned as it is. An app menu is a list
+    of plain rows, they are put under one ``Application`` row instead.
+    """
+    rows = gmenu_entries(menus, (0, 0), actions, id_of, depth)
+    shown = [row for row in rows if not row.separator]
+    if not shown or any(row.has_submenu for row in shown):
+        return rows
+    children = () if depth == 1 else tuple(rows)
+    return [
+        MenuEntry(
+            id=id_of(APP_ROW_KEY),
+            label=APP_ROW_LABEL,
+            has_submenu=True,
+            children=children,
+        )
+    ]
+
+
+def gmenu_children(
+    menus: GMenus,
+    key: Tuple[Any, ...],
+    actions: Dict[str, GAction],
+    id_of: IdOf,
+    depth: int = -1,
+) -> List[MenuEntry]:
+    """Rows below the row ``key``, empty for a row that has no submenu."""
+    if key == APP_ROW_KEY:
+        return gmenu_entries(menus, (0, 0), actions, id_of, depth)
+    if len(key) != 3:
+        return []
+    items = menus.get((key[0], key[1]), [])
+    if key[2] >= len(items):
+        return []
+    submenu = _link(items[key[2]], ":submenu")
+    if submenu is None:
+        return []
+    return gmenu_entries(menus, submenu, actions, id_of, depth)

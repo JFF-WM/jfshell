@@ -9,7 +9,7 @@ the GTK side (global_menu.py) hops to the GTK thread before touching widgets.
 """
 
 import typing
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Set
 
 from dbus_fast import BusType, NameFlag, RequestNameReply, Variant
 from dbus_fast.aio import MessageBus
@@ -46,6 +46,10 @@ _DBUSMENU_XML = """
     <signal name="LayoutUpdated">
       <arg type="u" name="revision"/>
       <arg type="i" name="parent"/>
+    </signal>
+    <signal name="ItemsPropertiesUpdated">
+      <arg type="a(ia{sv})" name="updatedProps"/>
+      <arg type="a(ias)" name="removedProps"/>
     </signal>
   </interface>
 </node>
@@ -102,6 +106,7 @@ class DBusMenuClient:
         self.logger = logger
         self._iface: typing.Any = None
         self._on_layout_updated: Optional[Callable[[int], None]] = None
+        self._top_ids: Set[int] = set()
 
     async def connect(self, on_layout_updated: Callable[[int], None]) -> None:
         """Bind the interface. ``on_layout_updated(parent_id)`` runs on the asyncio loop."""
@@ -111,10 +116,28 @@ class DBusMenuClient:
         self._iface = proxy.get_interface("com.canonical.dbusmenu")
         self._on_layout_updated = on_layout_updated
         self._iface.on_layout_updated(self._layout_updated)
+        self._iface.on_items_properties_updated(self._items_updated)
 
     def _layout_updated(self, _revision: int, parent: int) -> None:
         if self._on_layout_updated is not None:
             self._on_layout_updated(parent)
+
+    def _items_updated(
+        self, updated: List[typing.Any], removed: List[typing.Any]
+    ) -> None:
+        """Report a property change (``enabled``, ``label``...) of a top level row.
+
+        Apps flip these through ``ItemsPropertiesUpdated`` without ever emitting
+        ``LayoutUpdated``, so the bar would keep showing the stale row. Changes
+        deeper in the tree are ignored: the submenus are fetched on click.
+
+        Args:
+            updated: ``(id, properties)`` pairs of the rows that changed.
+            removed: ``(id, property_names)`` pairs of the rows that lost properties.
+        """
+        changed = {item[0] for item in updated} | {item[0] for item in removed}
+        if self._on_layout_updated is not None and changed & self._top_ids:
+            self._on_layout_updated(0)
 
     def close(self) -> None:
         """Stop reporting layout changes."""
@@ -122,6 +145,7 @@ class DBusMenuClient:
         if self._iface is not None:
             try:
                 self._iface.off_layout_updated(self._layout_updated)
+                self._iface.off_items_properties_updated(self._items_updated)
             except Exception:
                 pass
             self._iface = None
@@ -143,7 +167,10 @@ class DBusMenuClient:
                 f"GetLayout({parent_id}) failed on {self.service_name}{self.object_path}: {e}"
             )
             return []
-        return parse_layout(layout)
+        entries = parse_layout(layout)
+        if parent_id == 0:
+            self._top_ids = {entry.id for entry in entries}
+        return entries
 
     async def click(self, item_id: int) -> None:
         """Tell the app the row was clicked."""

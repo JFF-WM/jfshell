@@ -71,6 +71,13 @@ def get_plugin_class():
             self._undo_note = None
             self._toast_source = None
             self._active_clipboard_provider = None
+            self._calendar_grid = None
+            self._calendar_popover = None
+            self._calendar_popover_handler = None
+            self._calendar_notes_box = None
+            self._calendar_notes_scroll = None
+            self._calendar_attach_id = None
+            self._calendar_attach_tries = 0
 
             self.dialog_width = self.get_plugin_setting_add_hint(
                 ["dialog_width"], 980, "The width (in pixels) of the notes dialog."
@@ -173,11 +180,19 @@ def get_plugin_class():
             self._register_actions()
             self.plugins["css_generator"].install_css("notes.css")
             self.plugins["css_generator"].install_css("notes-dialog.css")
+            self.plugins["css_generator"].install_css("notes-calendar.css")
             self.reminder_timer_id = GLib.timeout_add_seconds(
                 max(1, int(self.reminder_check_interval)), self._check_reminders
             )
+            self._calendar_attach_id = GLib.timeout_add_seconds(
+                1, self._attach_calendar_notes
+            )
 
         def on_disable(self):
+            if self._calendar_attach_id is not None:
+                GLib.source_remove(self._calendar_attach_id)
+                self._calendar_attach_id = None
+            self._detach_calendar_notes()
             if self.reminder_timer_id is not None:
                 GLib.source_remove(self.reminder_timer_id)
                 self.reminder_timer_id = None
@@ -664,6 +679,8 @@ def get_plugin_class():
 
         def _on_notes_loaded(self, notes):
             self._is_populating = False
+            if notes is not None:
+                self._update_calendar_notes(notes)
             if notes is not None and self.dialog is not None:
                 self._notes = {note.id: note for note in notes}
                 # A fresh list is swapped in at once (no per-row reflow).
@@ -675,6 +692,104 @@ def get_plugin_class():
                 self._restore_selection()
             if self._repopulate:
                 self.refresh_notes()
+
+        def _attach_calendar_notes(self) -> bool:
+            """Add the notes list below the calendar of the clock popover.
+
+            Runs on a timer because the calendar plugin may load after this one.
+            Returns True to be called again until the calendar is available.
+            """
+            calendar = self.plugins.get("calendar")
+            grid = getattr(calendar, "grid", None)
+            popover = getattr(calendar, "popover_calendar", None)
+            if grid is None or popover is None:
+                self._calendar_attach_tries += 1
+                if self._calendar_attach_tries < 10:
+                    return True
+                self.logger.warning("Notes: calendar not available, list not added.")
+                self._calendar_attach_id = None
+                return False
+
+            self._calendar_attach_id = None
+            self._calendar_grid = grid
+            self._calendar_popover = popover
+            self._calendar_notes_box = Gtk.Box(
+                orientation=Gtk.Orientation.VERTICAL, spacing=6
+            )
+            self._calendar_notes_box.add_css_class("calendar-notes")
+            self._calendar_notes_box.set_size_request(340, -1)
+            self._calendar_notes_box.set_visible(False)
+            heading = Gtk.Label(label="Notes", xalign=0)
+            heading.add_css_class("calendar-notes-title")
+            self._calendar_notes_box.append(heading)
+            self._calendar_notes_scroll = Gtk.ScrolledWindow()
+            self._calendar_notes_scroll.set_policy(
+                Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC
+            )
+            self._calendar_notes_scroll.set_propagate_natural_height(True)
+            self._calendar_notes_scroll.set_max_content_height(160)
+            self._calendar_notes_box.append(self._calendar_notes_scroll)
+            grid.attach(self._calendar_notes_box, 0, 1, 1, 1)
+            self._calendar_popover_handler = popover.connect(
+                "notify::visible", self._on_calendar_visibility_changed
+            )
+            self.refresh_notes()
+            return False
+
+        def _detach_calendar_notes(self) -> None:
+            """Remove the notes list from the calendar popover."""
+            if self._calendar_popover is not None and self._calendar_popover_handler:
+                self._calendar_popover.disconnect(self._calendar_popover_handler)
+            if self._calendar_grid is not None and self._calendar_notes_box is not None:
+                self._calendar_grid.remove(self._calendar_notes_box)
+            self._calendar_grid = None
+            self._calendar_popover = None
+            self._calendar_popover_handler = None
+            self._calendar_notes_box = None
+            self._calendar_notes_scroll = None
+
+        def _on_calendar_visibility_changed(self, popover, _param) -> None:
+            if popover.get_visible():
+                self.refresh_notes()
+
+        def _update_calendar_notes(self, notes) -> None:
+            """Rebuild the calendar list: one row per note, newest change first."""
+            if self._calendar_notes_scroll is None:
+                return
+            listbox = Gtk.ListBox()
+            listbox.set_selection_mode(Gtk.SelectionMode.NONE)
+            listbox.add_css_class("calendar-notes-list")
+            shown = 0
+            for note in notes:
+                if note.content.strip():
+                    listbox.append(self._build_calendar_row(note))
+                    shown += 1
+            self._calendar_notes_scroll.set_child(listbox)
+            self._calendar_notes_box.set_visible(shown > 0)
+
+        def _build_calendar_row(self, note) -> Gtk.ListBoxRow:
+            """Title with the created and edited times, without the description."""
+            stamp, title = split_content(note.content)
+            info = []
+            if stamp:
+                info.append(f"Created {format_created(stamp)}")
+            info.append(f"Edited {format_age(note.updated).lower()}")
+
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            box.add_css_class("calendar-note-row")
+            title_label = Gtk.Label(label=title or "Untitled", xalign=0)
+            title_label.set_ellipsize(Pango.EllipsizeMode.END)
+            title_label.set_max_width_chars(40)
+            title_label.add_css_class("calendar-note-title")
+            info_label = Gtk.Label(label=" \u2022 ".join(info), xalign=0)
+            info_label.set_ellipsize(Pango.EllipsizeMode.END)
+            info_label.set_max_width_chars(40)
+            info_label.add_css_class("calendar-note-info")
+            box.append(title_label)
+            box.append(info_label)
+            row = Gtk.ListBoxRow(child=box)
+            row.set_activatable(False)
+            return row
 
         def _build_row(self, note):
             _stamp, title = split_content(note.content)

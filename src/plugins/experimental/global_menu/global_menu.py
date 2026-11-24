@@ -31,10 +31,12 @@ def get_plugin_class():
         MenuEntry,
         entry_label,
         normalize_mode,
+        select_gmenu_address,
         select_menu_address,
         split_sections,
     )
     from ._dbus import DBusMenuClient, connect_session_bus
+    from ._gmenu import GMenuClient
 
     class GlobalMenuPlugin(BasePlugin):
         """
@@ -44,6 +46,10 @@ def get_plugin_class():
         window) and focus changes through the ipc server. The address of the focused
         window is bound with DBusMenuClient, its top level rows become buttons, and a
         click fetches that row's submenu and pops it up.
+
+        GTK apps annotate only their action groups: for those the menu is read with
+        GMenuClient from ``org.gtk.Menus`` next to the application object. A window
+        with a dbusmenu address always uses that one.
 
         Responsive layout: the buttons live in an AdaptiveMenuBar. In ``auto`` mode it
         swaps them for one Menu button when the width it is given does not fit them,
@@ -64,7 +70,7 @@ def get_plugin_class():
             self._focused: Optional[int] = None
             self._bus: Any = None
             self._bus_lock: Optional[asyncio.Lock] = None
-            self._client: Optional[DBusMenuClient] = None
+            self._client: Optional[DBusMenuClient | GMenuClient] = None
             self._address: Optional[tuple] = None
             self._generation = 0
             self._buttons: List[Any] = []
@@ -172,6 +178,7 @@ def get_plugin_class():
             self.schedule_in_gtk_thread(self._window_gone, msg["view"]["id"])
 
         def _on_annotation(self, msg: dict):
+            self.logger.info(f"global_menu annotation: {msg.get('annotation')}")
             self.schedule_in_gtk_thread(self._set_annotation, msg["annotation"])
 
         def _on_annotation_removed(self, msg: dict):
@@ -197,9 +204,17 @@ def get_plugin_class():
 
         def _refresh(self):
             """Show the menu of the focused window, or nothing when it has none."""
-            address = select_menu_address(self._annotations.values(), self._focused)
+            address: Optional[tuple] = None
+            dbusmenu = select_menu_address(self._annotations.values(), self._focused)
+            if dbusmenu is not None:
+                address = ("dbusmenu", *dbusmenu)
+            else:
+                gmenu = select_gmenu_address(self._annotations.values(), self._focused)
+                if gmenu is not None:
+                    address = ("gmenu", *gmenu)
             if address == self._address:
                 return
+            self.logger.info(f"global_menu focused={self._focused} address={address}")
             self._address = address
             self._generation += 1
             self._drop_client()
@@ -216,10 +231,23 @@ def get_plugin_class():
                     self._bus = await connect_session_bus(self.logger)
             return self._bus
 
-        async def _attach(self, generation: int, service_name: str, object_path: str):
+        async def _attach(
+            self,
+            generation: int,
+            kind: str,
+            service_name: str,
+            object_path: str,
+            window_path: Optional[str] = None,
+        ):
             try:
                 bus = await self._get_bus()
-                client = DBusMenuClient(bus, service_name, object_path, self.logger)
+                client: DBusMenuClient | GMenuClient
+                if kind == "gmenu":
+                    client = GMenuClient(
+                        bus, service_name, object_path, window_path, self.logger
+                    )
+                else:
+                    client = DBusMenuClient(bus, service_name, object_path, self.logger)
                 await client.connect(partial(self._layout_updated, generation))
                 entries = await client.fetch(0, 1)
             except Exception as e:
@@ -227,6 +255,9 @@ def get_plugin_class():
                     f"global_menu could not read {service_name}{object_path}: {e}"
                 )
                 return
+            self.logger.info(
+                f"global_menu {kind} {service_name}{object_path}: {len(entries)} top level rows"
+            )
             self.schedule_in_gtk_thread(self._show_bar, generation, client, entries)
 
         def _layout_updated(self, generation: int, parent: int):
@@ -256,7 +287,9 @@ def get_plugin_class():
                 client.close()
 
         # --------------------------------------------------------------- widgets
-        def _show_bar(self, generation: int, client: DBusMenuClient, entries: list):
+        def _show_bar(
+            self, generation: int, client: DBusMenuClient | GMenuClient, entries: list
+        ):
             if generation != self._generation:
                 client.close()
                 return
@@ -315,7 +348,7 @@ def get_plugin_class():
             )
 
         async def _fetch_tree(
-            self, client: DBusMenuClient, entries: List[MenuEntry]
+            self, client: DBusMenuClient | GMenuClient, entries: List[MenuEntry]
         ) -> List[tuple]:
             """Each top level row with its submenu, fetched as a click on its button would."""
             shown = [e for e in entries if not e.separator and e.label]

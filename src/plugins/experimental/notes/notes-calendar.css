@@ -1,0 +1,27 @@
+/* Notes list shown below the calendar of the clock popover. */
+
+.calendar-notes {
+  padding-top: 4px;
+}
+
+.calendar-notes-title {
+  font-weight: bold;
+  opacity: 0.8;
+}
+
+.calendar-notes-list {
+  background: transparent;
+}
+
+.calendar-note-row {
+  padding: 4px 6px;
+}
+
+.calendar-note-title {
+  font-weight: 500;
+}
+
+.calendar-note-info {
+  font-size: 0.85em;
+  opacity: 0.65;
+}

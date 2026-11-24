@@ -1,7 +1,7 @@
 def get_plugin_metadata(_):
     about = """
-    This plugin adds a weather display to another plugin's user
-    interface, fetching weather data asynchronously and updating the
+    This plugin adds a weather page to the calendar popover,
+    fetching weather data asynchronously and updating the
     display periodically.
     """
     return {
@@ -29,8 +29,10 @@ def get_plugin_class():
     class WeatherPlugin(BasePlugin):
         """
         Plugin to fetch and display a detailed weather summary,
-        integrated into the calendar popover using a structured Gtk.Grid.
+        shown as its own page of the calendar popover using a structured Gtk.Grid.
         """
+
+        PAGE_ID = "weather"
 
         def __init__(self, panel_instance):
             """
@@ -158,15 +160,20 @@ def get_plugin_class():
             self.weather_grid.attach(self.rain_total_label, 0, 6, 2, 1)  # pyright: ignore
 
             def update_ui():
-                """Attaches the grid to the calendar popover."""
-                grid = (
-                    getattr(calendar_plugin, "grid", None)
-                    or calendar_plugin.popover_calendar.get_child()
+                """Adds the weather page to the calendar popover sidebar."""
+                grid = cast(self.gtk.Grid, self.weather_grid)  # pyright: ignore
+                grid.set_halign(self.gtk.Align.CENTER)
+                grid.set_valign(self.gtk.Align.CENTER)
+                grid.set_margin_top(16)
+                grid.set_margin_bottom(16)
+                grid.set_margin_start(16)
+                grid.set_margin_end(16)
+                calendar_plugin.add_page(
+                    self.PAGE_ID,
+                    ["weather-few-clouds-symbolic", "weather-clear-symbolic"],
+                    "Weather",
+                    grid,
                 )
-                if grid:
-                    grid.attach(cast(self.gtk.Grid, self.weather_grid), 0, 1, 1, 1)  # pyright: ignore
-                    cast(self.gtk.Grid, self.weather_grid).show()  # pyright: ignore
-                    grid.show()
 
             self.schedule_in_gtk_thread(update_ui)
             self.run_in_async_task(self.fetch_and_update_weather_async())
@@ -355,5 +362,8 @@ def get_plugin_class():
             if self.update_task and not self.update_task.done():
                 self.update_task.cancel()
                 self.logger.info("Cancelled weather periodic update task.")
+            calendar_plugin = self.plugins.get("calendar")
+            if calendar_plugin:
+                calendar_plugin.remove_page(self.PAGE_ID)
 
     return WeatherPlugin

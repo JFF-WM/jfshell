@@ -30,7 +30,7 @@ def get_plugin_class():
         Plugin to integrate a calendar popover with the clock plugin.
 
         The popover holds a vertical sidebar and a stack of pages. The calendar
-        (with the weather and notes plugins attached to ``self.grid``) is the
+        (with the notes plugin attached to ``self.grid``) is the
         first page. Other plugins add pages with ``add_page``.
         """
 

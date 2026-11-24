@@ -29,7 +29,7 @@ class ConcurrencyHelper:
         Executes a blocking function in a background thread via the shared executor.
         The resulting Future is automatically tracked for cleanup.
         """
-        self.logger.debug(f"Scheduling function {func.__name__} in background thread.")
+        self.logger.debug(f"Scheduling function {getattr(func, '__name__', repr(func))} in background thread.")
         future = self.global_executor.submit(func, *args, **kwargs)
         self._running_futures.add(future)
         future.add_done_callback(self._cleanup_future)
@@ -51,13 +51,13 @@ class ConcurrencyHelper:
                 func(*args, **kwargs)
             except Exception as e:
                 self.logger.error(
-                    f"Error executing function {func.__name__} in GTK thread: {e}",
+                    f"Error executing function {getattr(func, '__name__', repr(func))} in GTK thread: {e}",
                     exc_info=True,
                 )
             return GLib.SOURCE_REMOVE
 
         GLib.idle_add(wrapper)
-        self.logger.debug(f"Scheduled function {func.__name__} in GTK main thread.")
+        self.logger.debug(f"Scheduled function {getattr(func, '__name__', repr(func))} in GTK main thread.")
 
     def run_in_async_task(
         self,
