@@ -63,6 +63,21 @@ def get_plugin_class():
 
         REFRESH_DELAY_MS = 80
 
+        # Applied at user priority so it wins over the theme padding, which is what
+        # makes the entries sit far apart. Scoped to the bar: the overview button
+        # shares the .global-menu-button class.
+        MENU_CSS = """
+.global-menu-box {
+    padding: 0;
+}
+.global-menu-box .global-menu-button {
+    min-width: 0;
+    margin: 0;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+"""
+
         def __init__(self, panel_instance):
             super().__init__(panel_instance)
             self._annotations: Dict[int, Dict[str, Any]] = {}
@@ -81,6 +96,7 @@ def get_plugin_class():
             self._bar: Any = None
             self._compact_button: Any = None
             self._compact_popover: Any = None
+            self._css_provider: Any = None
             self._entries: List[MenuEntry] = []
             self._mode = normalize_mode(
                 self.get_plugin_setting_add_hint(
@@ -94,6 +110,7 @@ def get_plugin_class():
 
         # ---------------------------------------------------------- startup
         def on_start(self):
+            self._install_css()
             self._box = self.gtk.Box(orientation=self.gtk.Orientation.HORIZONTAL)
             self._box.add_css_class("global-menu-box")
             self._box.set_valign(self.gtk.Align.CENTER)
@@ -143,6 +160,7 @@ def get_plugin_class():
                 self._refresh_source = 0
             self._drop_client()
             self._clear_bar()
+            self._remove_css()
             bus, self._bus = self._bus, None
             if bus is not None:
                 # Letting go of the registrar name makes apps show their own menu bar again.
@@ -150,6 +168,26 @@ def get_plugin_class():
                     bus.disconnect()
                 except Exception as e:
                     self.logger.warning(f"global_menu could not leave the bus: {e}")
+
+        def _install_css(self):
+            display = self.gdk.Display.get_default()
+            if display is None or self._css_provider is not None:
+                return
+            provider = self.gtk.CssProvider()
+            if hasattr(provider, "load_from_string"):
+                provider.load_from_string(self.MENU_CSS)
+            else:
+                provider.load_from_data(self.MENU_CSS.encode())
+            self.gtk.StyleContext.add_provider_for_display(
+                display, provider, self.gtk.STYLE_PROVIDER_PRIORITY_USER
+            )
+            self._css_provider = provider
+
+        def _remove_css(self):
+            provider, self._css_provider = self._css_provider, None
+            display = self.gdk.Display.get_default()
+            if provider is not None and display is not None:
+                self.gtk.StyleContext.remove_provider_for_display(display, provider)
 
         # ------------------------------------------------------------- state
         def _load_snapshot(self):

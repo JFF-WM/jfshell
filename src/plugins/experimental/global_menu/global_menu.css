@@ -1,0 +1,17 @@
+/*
+ * Global menu bar layout.
+ *
+ * Picked up by css_generator (it imports <plugin id suffix>.css from the plugin
+ * folder after the theme), so it overrides the theme padding. Scoped to
+ * .global-menu-box so the overview button, which shares the
+ * .global-menu-button class, is not affected.
+ */
+.global-menu-box {
+  padding: 0;
+}
+
+.global-menu-box .global-menu-button {
+  min-width: 0;
+  margin: 0;
+  padding-left: 8px;
+  padding-right: 8px;
