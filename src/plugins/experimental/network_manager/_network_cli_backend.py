@@ -3,6 +3,17 @@ import subprocess
 import functools
 from typing import Optional, Dict, Any, List, Tuple
 from src.shared.command_runner import CommandRunner
+from ._network_parse import (
+    ActiveConnection,
+    SavedConnection,
+    WifiNetwork,
+    parse_saved_wifi,
+    parse_wifi_list,
+    parse_wifi_radio,
+    pick_active_device,
+    property_value,
+    with_ssid,
+)
 
 NmcliDeviceDict = Dict[str, str]
 
@@ -332,6 +343,233 @@ class NetworkCLI:
                 await self.cmd.run_async(modify_command)
         except Exception as e:
             self.logger.error(f"CLI: Error applying autoconnect modification: {e}")
+
+    @staticmethod
+    def _short_error(stderr: str, fallback: str) -> str:
+        """Reduce an nmcli error to one short line fit for a label."""
+        if "secrets were required" in stderr.lower():
+            return "Wrong password"
+        for line in stderr.strip().splitlines():
+            line = line.strip()
+            if line:
+                return line.removeprefix("Error: ")[:120]
+        return fallback
+
+    async def get_wifi_radio_enabled_async(self) -> bool:
+        """
+        Asynchronously reads the Wi-Fi radio state using 'nmcli radio wifi'.
+        Returns:
+            True when the radio is enabled, False when disabled or on error.
+        """
+        code, stdout, _ = await self.cmd.run_async(["nmcli", "radio", "wifi"])
+        return code == 0 and parse_wifi_radio(stdout)
+
+    async def set_wifi_radio_async(self, enabled: bool) -> bool:
+        """
+        Asynchronously turns the Wi-Fi radio on or off.
+        Args:
+            enabled: True to turn the radio on, False to turn it off.
+        Returns:
+            True when nmcli accepted the change.
+        """
+        state = "on" if enabled else "off"
+        code, _, stderr = await self.cmd.run_async(["nmcli", "radio", "wifi", state])
+        if code != 0:
+            self.logger.error(f"CLI: Failed to turn Wi-Fi {state}: {stderr}")
+        return code == 0
+
+    async def list_wifi_async(
+        self, rescan: bool = False
+    ) -> Tuple[bool, List[WifiNetwork]]:
+        """
+        Asynchronously lists access points, merged by SSID.
+        Args:
+            rescan: Ask the driver for a fresh scan first. A scan takes a few
+                seconds, so the cached list is returned when this is False.
+        Returns:
+            A tuple of (command succeeded, networks sorted by signal).
+        """
+        try:
+            if rescan:
+                await self.cmd.run_async(["nmcli", "device", "wifi", "rescan"])
+                await asyncio.sleep(2.5)
+            code, stdout, stderr = await self.cmd.run_async(
+                [
+                    "nmcli",
+                    "-t",
+                    "-f",
+                    "IN-USE,SSID,SIGNAL,SECURITY,FREQ,BSSID",
+                    "device",
+                    "wifi",
+                    "list",
+                ]
+            )
+            if code != 0:
+                self.logger.error(f"CLI: Wi-Fi list failed: {stderr}")
+                return False, []
+            return True, parse_wifi_list(stdout)
+        except Exception as e:
+            self.logger.error(f"CLI: Unexpected error listing Wi-Fi: {e}")
+            return False, []
+
+    async def list_saved_wifi_async(self) -> List[SavedConnection]:
+        """
+        Asynchronously lists stored Wi-Fi profiles with their real SSIDs.
+        Returns:
+            The saved Wi-Fi profiles, or an empty list on error.
+        """
+        try:
+            code, stdout, _ = await self.cmd.run_async(
+                ["nmcli", "-t", "-f", "NAME,UUID,TYPE", "connection", "show"]
+            )
+            if code != 0:
+                return []
+            profiles = parse_saved_wifi(stdout)
+
+            async def resolve(profile: SavedConnection) -> SavedConnection:
+                _, ssid, _ = await self.cmd.run_async(
+                    [
+                        "nmcli",
+                        "-g",
+                        "802-11-wireless.ssid",
+                        "connection",
+                        "show",
+                        "uuid",
+                        profile.uuid,
+                    ]
+                )
+                return with_ssid(profile, ssid.strip())
+
+            return list(await asyncio.gather(*(resolve(p) for p in profiles)))
+        except Exception as e:
+            self.logger.error(f"CLI: Unexpected error listing saved Wi-Fi: {e}")
+            return []
+
+    async def connect_wifi_async(
+        self,
+        ssid: str,
+        password: Optional[str] = None,
+        saved_uuid: Optional[str] = None,
+    ) -> Tuple[bool, str]:
+        """
+        Asynchronously connects to a Wi-Fi network.
+        A stored profile is activated by UUID so no duplicate profile is made;
+        anything else goes through 'nmcli device wifi connect'.
+        Args:
+            ssid: The SSID of the network.
+            password: Passphrase for a new secured network.
+            saved_uuid: UUID of the stored profile, when there is one.
+        Returns:
+            A tuple of (connected, short error message or empty string).
+        """
+        self.logger.info(f"CLI: Connecting to {ssid}")
+        if saved_uuid:
+            command = ["nmcli", "--wait", "20", "connection", "up", "uuid", saved_uuid]
+        else:
+            command = ["nmcli", "--wait", "20", "device", "wifi", "connect", ssid]
+            if password:
+                command += ["password", password]
+        code, _, stderr = await self.cmd.run_async(command)
+        if code == 0:
+            return True, ""
+        self.logger.error(f"CLI: Failed to connect to {ssid}: {stderr}")
+        if not saved_uuid:
+            # nmcli may leave a half-made profile behind after a failed first
+            # attempt, remove it so the network is not listed as saved.
+            await self.cmd.run_async(["nmcli", "connection", "delete", "id", ssid])
+        return False, self._short_error(stderr, "Could not connect")
+
+    async def disconnect_device_async(self, device: str) -> bool:
+        """
+        Asynchronously disconnects a device with 'nmcli device disconnect'.
+        Args:
+            device: The interface name, e.g. 'wlan0'.
+        Returns:
+            True when the device was disconnected.
+        """
+        code, _, stderr = await self.cmd.run_async(
+            ["nmcli", "device", "disconnect", device]
+        )
+        if code != 0:
+            self.logger.error(f"CLI: Failed to disconnect {device}: {stderr}")
+        return code == 0
+
+    async def forget_connection_async(self, uuid: str) -> bool:
+        """
+        Asynchronously deletes a stored connection profile.
+        Args:
+            uuid: UUID of the profile to delete.
+        Returns:
+            True when the profile was deleted.
+        """
+        code, _, stderr = await self.cmd.run_async(
+            ["nmcli", "connection", "delete", "uuid", uuid]
+        )
+        if code != 0:
+            self.logger.error(f"CLI: Failed to delete profile {uuid}: {stderr}")
+        return code == 0
+
+    async def get_active_connection_async(
+        self, wifi_networks: Optional[List[WifiNetwork]] = None
+    ) -> Optional[ActiveConnection]:
+        """
+        Asynchronously describes the connection in use for the status card.
+        Args:
+            wifi_networks: A recent Wi-Fi list, used to add signal and band
+                for a wireless connection.
+        Returns:
+            The active connection, or None when nothing is connected.
+        """
+        try:
+            code, stdout, _ = await self.cmd.run_async(
+                [
+                    "nmcli",
+                    "-t",
+                    "-f",
+                    "DEVICE,TYPE,STATE,CONNECTION",
+                    "device",
+                    "status",
+                ]
+            )
+            if code != 0:
+                return None
+            picked = pick_active_device(
+                stdout, await self.get_default_interface_async()
+            )
+            if picked is None:
+                return None
+            device, kind, name = picked
+            props: Dict[str, str] = {}
+            for entry in self.parse_nmcli_output(
+                await self.run_nmcli_device_show_async()
+            ):
+                if entry.get("GENERAL.DEVICE") == device:
+                    props = entry
+                    break
+            signal: Optional[int] = None
+            band = ""
+            security = ""
+            if kind == "wifi":
+                for network in wifi_networks or []:
+                    if network.in_use or network.ssid == name:
+                        signal, band = network.signal, network.band
+                        security = network.security if network.secured else ""
+                        break
+            return ActiveConnection(
+                kind=kind,
+                device=device,
+                name=name,
+                ip=property_value(props, "IP4.ADDRESS"),
+                gateway=property_value(props, "IP4.GATEWAY"),
+                dns=property_value(props, "IP4.DNS"),
+                mac=props.get("GENERAL.HWADDR", ""),
+                signal=signal,
+                band=band,
+                security=security,
+            )
+        except Exception as e:
+            self.logger.error(f"CLI: Error reading active connection: {e}")
+            return None
 
     def parse_nmcli_output(self, raw_output: str) -> List[NmcliDeviceDict]:
         """

@@ -14,9 +14,19 @@ def get_plugin_metadata(_):
 
 
 def get_plugin_class():
-    from typing import Dict, Any, List
+    from typing import Dict, List, Optional
+    from gi.repository import Pango
     from src.plugins.core._base import BasePlugin
     from ._network_cli_backend import NetworkCLI
+    from ._network_parse import (
+        ActiveConnection,
+        NetworkEntry,
+        SavedConnection,
+        WifiNetwork,
+        details_text,
+        group_entries,
+        signal_icon,
+    )
 
     ICON_WIFI_CONNECTED = "wifi"
     ICON_WIFI_DISCONNECTED = "network-wireless-disconnected-symbolic"
@@ -25,6 +35,7 @@ def get_plugin_class():
     ICON_WIFI_OK = "network-wireless-signal-ok-symbolic"
     ICON_WIFI_WEAK = "network-wireless-signal-weak-symbolic"
     PAGE_ID = "network"
+    TRAILING_SLOT_WIDTH = 28
 
     class NetworkManager(BasePlugin):
         def __init__(self, panel_instance):
@@ -59,24 +70,53 @@ def get_plugin_class():
             self.icon_wifi_disconnected = self.gtk_helper.icon_exist(
                 ICON_WIFI_DISCONNECTED, ["network-wireless-disconnected-symbolic"]
             )
+            self.icon_lock = self.gtk_helper.icon_exist(
+                "changes-prevent-symbolic",
+                ["system-lock-screen-symbolic", "object-locked-symbolic"],
+            )
+            self.icon_trash = self.gtk_helper.icon_exist(
+                "user-trash-symbolic", ["edit-delete-symbolic"]
+            )
+            self.icon_disconnect = self.gtk_helper.icon_exist(
+                "network-wireless-offline-symbolic",
+                ["network-wireless-disconnected-symbolic", "process-stop-symbolic"],
+            )
+            self.icon_settings = self.gtk_helper.icon_exist(
+                "emblem-system-symbolic",
+                ["preferences-system-symbolic", "gnome-control-center-symbolic"],
+            )
             self.icon = self.icon_wired_disconnected
-            self.stack = None
-            self.header_box = None
-            self.header_back_button = None
-            self.header_title = None
-            self.detail_container = None
-            self.init_ui()
-            self.global_loop.create_task(self.periodic_check_async())
             self.network_disconnected = None
             self.notify_was_sent = False
-            self.scan_revealer = None
-            self.wifi_list_box = None
-            self.wifi_scan_button = None
+            # Model: everything the page shows is derived from this state.
+            self.wifi_enabled = True
+            self.wifi_networks: List[WifiNetwork] = []
+            self.saved_wifi: List[SavedConnection] = []
+            self.active_connection: Optional[ActiveConnection] = None
+            self.list_error = ""
             self.scanning_in_progress = False
-            self.cached_wifi_networks: List[Dict[str, Any]] = []
             self.last_scan_time: float = 0.0
-            self.scan_status_label = None
-            self.wifi_list_revealer = None
+            self.connecting_ssid: Optional[str] = None
+            self.prompt_ssid: Optional[str] = None
+            self.row_errors: Dict[str, str] = {}
+            self.refresh_lock = self.asyncio.Lock()
+            self._syncing_switch = False
+            self._focus_widget = None
+            # View: built once, updated in place.
+            self.current_card = None
+            self.current_name = None
+            self.current_detail = None
+            self.disconnect_button = None
+            self.wifi_switch = None
+            self.refresh_button = None
+            self.refresh_stack = None
+            self.refresh_spinner = None
+            self.content_stack = None
+            self.list_box = None
+            self.message_icon = None
+            self.message_label = None
+            self.init_ui()
+            self.global_loop.create_task(self.periodic_check_async())
             self.ssids_to_auto_connect = self.get_plugin_setting(
                 ["auto_connect_ssids"], ["Wi-Fi-NAME"]
             )
@@ -96,10 +136,12 @@ def get_plugin_class():
 
         async def start_periodic_wifi_scan_async(self):
             """Starts a periodic background scan for Wi-Fi networks using self.asyncio."""
-            await self.scan_networks_and_update_cache()
             while True:
+                try:
+                    await self.refresh_async(rescan=True)
+                except Exception as e:
+                    self.logger.error(f"Periodic Wi-Fi scan failed: {e}")
                 await self.asyncio.sleep(self.scan_interval)
-                await self.scan_networks_and_update_cache()
 
         def notify_send_network_disconnected(self):
             if self.network_disconnected and self.notify_was_sent is False:
@@ -113,12 +155,21 @@ def get_plugin_class():
                 )
                 self.notify_was_sent = True
 
+        # ------------------------------------------------------------------ #
+        # View construction (runs once)
+        # ------------------------------------------------------------------ #
+
         def init_ui(self):
             """
             Initialize the page and add it to the clock popover's sidebar.
-            The page content is rebuilt each time the page becomes visible.
+            The layout is built once; refreshes update the widgets in place.
             """
-            self.page_root = self.gtk.Box(orientation=self.gtk.Orientation.VERTICAL)
+            self.page_root = self.gtk.Box(
+                orientation=self.gtk.Orientation.VERTICAL, spacing=12
+            )
+            self.page_root.add_css_class("nm-page")
+            self.page_root.append(self._build_current_card())
+            self.page_root.append(self._build_wifi_card())
             self.calendar.add_page(
                 PAGE_ID,
                 [self.icon, "network-wireless-symbolic", "network-wired-symbolic"],
@@ -128,6 +179,115 @@ def get_plugin_class():
                 on_hide=self.on_page_hide,
             )
             self.global_loop.create_task(self.update_icon_async())
+
+        def _build_current_card(self):
+            """The "Current connection" card: name, details and a disconnect button."""
+            card = self.gtk.Box(orientation=self.gtk.Orientation.VERTICAL, spacing=8)
+            card.add_css_class("nm-card")
+            title = self.gtk.Label(label="Current connection")
+            title.set_halign(self.gtk.Align.START)
+            title.add_css_class("nm-card-title")
+            row = self.gtk.Box(orientation=self.gtk.Orientation.HORIZONTAL, spacing=10)
+            info = self.gtk.Box(orientation=self.gtk.Orientation.HORIZONTAL, spacing=8)
+            info.set_hexpand(True)
+            info.set_valign(self.gtk.Align.CENTER)
+            self.current_name = self.gtk.Label(label="Not connected")
+            self.current_name.set_halign(self.gtk.Align.START)
+            self.current_name.set_ellipsize(Pango.EllipsizeMode.END)
+            self.current_name.add_css_class("nm-current-name")
+            self.current_detail = self.gtk.Label(label="")
+            self.current_detail.set_halign(self.gtk.Align.START)
+            self.current_detail.set_ellipsize(Pango.EllipsizeMode.END)
+            self.current_detail.add_css_class("nm-dim")
+            info.append(self.current_name)
+            info.append(self.current_detail)
+            self.disconnect_button = self.gtk.Button.new_from_icon_name(
+                self.icon_disconnect
+            )
+            self.disconnect_button.add_css_class("nm-disconnect")
+            self.disconnect_button.set_tooltip_text("Disconnect")
+            self.disconnect_button.set_valign(self.gtk.Align.CENTER)
+            self.disconnect_button.set_visible(False)
+            self.disconnect_button.connect("clicked", self._on_disconnect_clicked)
+            self.gtk_helper.add_cursor_effect(self.disconnect_button)
+            row.append(info)
+            row.append(self.disconnect_button)
+            card.append(title)
+            card.append(row)
+            self.current_card = card
+            return card
+
+        def _build_wifi_card(self):
+            """The Wi-Fi card: header with controls, then the network list."""
+            card = self.gtk.Box(orientation=self.gtk.Orientation.VERTICAL, spacing=10)
+            card.add_css_class("nm-card")
+            header = self.gtk.Box(
+                orientation=self.gtk.Orientation.HORIZONTAL, spacing=6
+            )
+            title = self.gtk.Label(label="Wi-Fi")
+            title.set_halign(self.gtk.Align.START)
+            title.set_hexpand(True)
+            title.add_css_class("nm-card-title")
+            settings_button = self.gtk.Button.new_from_icon_name(self.icon_settings)
+            settings_button.add_css_class("nm-icon-button")
+            settings_button.set_tooltip_text("Network settings")
+            settings_button.connect("clicked", self._on_settings_clicked)
+            self.gtk_helper.add_cursor_effect(settings_button)
+            self.refresh_spinner = self.gtk.Spinner()
+            self.refresh_stack = self.gtk.Stack()
+            self.refresh_stack.add_named(
+                self.gtk.Image.new_from_icon_name("view-refresh-symbolic"), "icon"
+            )
+            self.refresh_stack.add_named(self.refresh_spinner, "spinner")
+            self.refresh_button = self.gtk.Button()
+            self.refresh_button.set_child(self.refresh_stack)
+            self.refresh_button.add_css_class("nm-icon-button")
+            self.refresh_button.set_tooltip_text("Scan for networks")
+            self.refresh_button.connect("clicked", self._on_refresh_clicked)
+            self.gtk_helper.add_cursor_effect(self.refresh_button)
+            self.wifi_switch = self.gtk.Switch()
+            self.wifi_switch.set_valign(self.gtk.Align.CENTER)
+            self.wifi_switch.set_active(self.wifi_enabled)
+            self.wifi_switch.connect("state-set", self._on_wifi_switch)
+            header.append(title)
+            header.append(settings_button)
+            header.append(self.refresh_button)
+            header.append(self.wifi_switch)
+
+            self.list_box = self.gtk.Box(
+                orientation=self.gtk.Orientation.VERTICAL, spacing=4
+            )
+            scrolled = self.gtk.ScrolledWindow()
+            scrolled.set_policy(
+                self.gtk.PolicyType.NEVER, self.gtk.PolicyType.AUTOMATIC
+            )
+            scrolled.set_min_content_height(180)
+            scrolled.set_max_content_height(340)
+            scrolled.set_propagate_natural_height(True)
+            scrolled.add_css_class("nm-scroll")
+            scrolled.set_child(self.list_box)
+
+            message = self.gtk.Box(orientation=self.gtk.Orientation.VERTICAL, spacing=8)
+            message.set_valign(self.gtk.Align.CENTER)
+            message.add_css_class("nm-message")
+            self.message_icon = self.gtk.Image.new_from_icon_name(
+                "network-wireless-offline-symbolic"
+            )
+            self.message_icon.set_pixel_size(40)
+            self.message_label = self.gtk.Label(label="")
+            self.message_label.add_css_class("nm-dim")
+            message.append(self.message_icon)
+            message.append(self.message_label)
+
+            self.content_stack = self.gtk.Stack()
+            self.content_stack.set_vhomogeneous(False)
+            self.content_stack.set_interpolate_size(True)
+            self.content_stack.add_named(scrolled, "list")
+            self.content_stack.add_named(message, "message")
+
+            card.append(header)
+            card.append(self.content_stack)
+            return card
 
         def on_disable(self):
             """Take the page out of the clock popover."""
@@ -139,13 +299,6 @@ def get_plugin_class():
             page = self.calendar.pages.get(PAGE_ID) if self.calendar else None
             if page:
                 page["button"].set_child(self.gtk.Image.new_from_icon_name(self.icon))
-            return False
-
-        def _set_page_content(self, content) -> bool:
-            """Replace the page's content with a freshly built one."""
-            while child := self.page_root.get_first_child():
-                self.page_root.remove(child)
-            self.page_root.append(content)
             return False
 
         def _is_wireless_interface(self, interface: str) -> bool:
@@ -192,18 +345,15 @@ def get_plugin_class():
                 await self.asyncio.sleep(30)
 
         def on_page_show(self) -> None:
-            """Update content when the page becomes visible."""
+            """Draw what is known right away, then refresh in the background."""
             self.page_visible = True
-            self.global_loop.create_task(self.update_popover_content_async())
+            self._render()
+            self.run_in_async_task(self.refresh_async(rescan=True))
 
         def on_page_hide(self) -> None:
             """The page is no longer visible."""
             self.page_visible = False
-
-        async def update_popover_content_async(self):
-            """Update popover content without changing the icon."""
-            content = await self.create_scrollable_grid_content_async()
-            self.glib.idle_add(self._set_page_content, content)
+            self.prompt_ssid = None
 
         async def is_internet_connected_async(self) -> bool:
             """
@@ -218,305 +368,349 @@ def get_plugin_class():
             self.notify_send_network_disconnected()
             return False
 
-        def _create_device_detail_content(self, device: Dict[str, str]):
-            """Creates the Gtk.Grid with all details for a single network device."""
-            detail_box = self.gtk.Box(
-                orientation=self.gtk.Orientation.VERTICAL, spacing=10
-            )
-            grid = self.gtk.Grid()
-            grid.add_css_class("network-manager-device-details-grid")
-            grid.set_row_spacing(6)
-            grid.set_column_spacing(12)
-            row = 0
-            for key, value in device.items():
-                label_key = self.gtk.Label(label=key.strip())
-                label_key.set_halign(self.gtk.Align.START)
-                label_key.add_css_class("dim-label")
-                label_value = self.gtk.Label(label=value.strip())
-                label_value.set_halign(self.gtk.Align.START)
-                label_value.set_selectable(True)
-                label_value.set_wrap(True)
-                grid.attach(label_key, 0, row, 1, 1)
-                grid.attach(label_value, 1, row, 1, 1)
-                row += 1
-            detail_box.append(grid)
-            return detail_box
+        # ------------------------------------------------------------------ #
+        # State refresh (runs on the background loop)
+        # ------------------------------------------------------------------ #
 
-        def on_device_icon_clicked(self, button, device_data):
-            """Handles the click on a device icon to show its details (drill-down)."""
-            interface_name = device_data.get("GENERAL.DEVICE", "Unknown")
+        def _push_render(self) -> None:
+            """Ask the GTK thread to redraw from the current state."""
+            self.schedule_in_gtk_thread(self._render)
 
-            def switch_to_detail():
-                self.header_title.set_label(f"{interface_name} Details")
-                self.header_back_button.set_visible(True)
-                detail_content = self._create_device_detail_content(device_data)
-                while child := self.detail_container.get_first_child():
-                    self.detail_container.remove(child)
-                self.detail_container.append(detail_content)
-                self.stack.set_visible_child_name("detail_view")
+        def _apply_networks(self, ok: bool, networks: List[WifiNetwork]) -> None:
+            """Store a scan result; keep the old list when the scan failed."""
+            if ok:
+                self.wifi_networks = networks
+                self.list_error = ""
+            else:
+                self.list_error = "Could not scan for networks"
 
-            self.glib.idle_add(switch_to_detail)
-
-        def on_back_button_clicked(self, button):
-            """Handles the back button click to return to the dashboard view."""
-
-            def switch_to_dashboard():
-                self.stack.set_visible_child_name("dashboard_view")
-
-            self.glib.idle_add(switch_to_dashboard)
-
-        async def create_scrollable_grid_content_async(self):
-            main_popover_box = self.gtk.Box(
-                orientation=self.gtk.Orientation.VERTICAL, spacing=0
-            )
-            main_popover_box.add_css_class("network-manager-popover-content")
-            self.header_box = self.gtk.Box(
-                orientation=self.gtk.Orientation.HORIZONTAL, spacing=6
-            )
-            self.header_box.set_margin_top(10)
-            self.header_box.set_margin_bottom(10)
-            self.header_box.set_margin_start(10)
-            self.header_box.set_margin_end(10)
-            self.header_box.add_css_class("network-manager-header")
-            self.header_back_button = self.gtk.Button.new_from_icon_name(
-                "go-previous-symbolic"
-            )
-            self.header_back_button.set_visible(False)
-            self.header_back_button.connect("clicked", self.on_back_button_clicked)
-            self.header_title = self.gtk.Label(label="Network Dashboard")
-            self.header_title.add_css_class("network-manager-heading")
-            self.header_title.set_halign(self.gtk.Align.START)
-            self.header_box.append(self.header_back_button)
-            self.header_box.append(self.header_title)
-            main_popover_box.append(self.header_box)
-            self.stack = self.gtk.Stack()
-            self.stack.set_transition_type(
-                self.gtk.StackTransitionType.SLIDE_LEFT_RIGHT
-            )
-            dashboard_vbox = self.gtk.Box(
-                orientation=self.gtk.Orientation.VERTICAL, spacing=10
-            )
-            dashboard_vbox.set_margin_start(10)
-            dashboard_vbox.set_margin_end(10)
-            dashboard_vbox.set_margin_bottom(10)
-            dashboard_vbox.add_css_class("network-dashboard-view")
-            wifi_scan_box = self.gtk.Box(
-                orientation=self.gtk.Orientation.VERTICAL, spacing=10
-            )
-            wifi_scan_box.add_css_class("network-manager-wifi-scan-box")
-            wifi_toggle_button = self.gtk.Button()
-            wifi_toggle_button.add_css_class("network-manager-device-toggle-button")
-            wifi_toggle_box = self.gtk.Box(
-                orientation=self.gtk.Orientation.HORIZONTAL, spacing=6
-            )
-            wifi_toggle_box.add_css_class("network-manager-device-header")
-            self.scan_status_label = self.gtk.Label(label="Wi-Fi Networks")
-            self.scan_status_label.set_halign(self.gtk.Align.START)
-            wifi_arrow_icon = self.gtk.Image.new_from_icon_name("pan-down-symbolic")
-            wifi_toggle_box.append(self.scan_status_label)
-            wifi_toggle_box.append(wifi_arrow_icon)
-            wifi_toggle_button.set_child(wifi_toggle_box)
-            wifi_scan_box.append(wifi_toggle_button)
-            self.wifi_list_revealer = self.gtk.Revealer()
-            self.wifi_list_revealer.set_transition_type(
-                self.gtk.RevealerTransitionType.SLIDE_DOWN
-            )
-            self.wifi_list_revealer.set_reveal_child(False)
-            self.wifi_list_box = self.gtk.Box(
-                orientation=self.gtk.Orientation.VERTICAL, spacing=6
-            )
-            self.wifi_list_revealer.set_child(self.wifi_list_box)
-
-            def on_toggle_wifi_list(
-                btn, revealer=self.wifi_list_revealer, icon=wifi_arrow_icon
-            ):
-                revealed = revealer.get_reveal_child()
-                revealer.set_reveal_child(not revealed)
-                icon.set_from_icon_name(
-                    "pan-up-symbolic" if revealed else "pan-down-symbolic"
-                )
-
-            wifi_toggle_button.connect("clicked", on_toggle_wifi_list)
-            wifi_scan_box.append(self.wifi_list_revealer)
-            dashboard_vbox.append(wifi_scan_box)
-            await self.populate_wifi_list_async()
-            dashboard_vbox.append(
-                self.gtk.Separator.new(self.gtk.Orientation.HORIZONTAL)
-            )
-            output = await self.cli_backend.run_nmcli_device_show_async()
-            devices = self.cli_backend.parse_nmcli_output(output)
-            device_dashboard_label = self.gtk.Label(label="<b>Network Devices</b>")
-            device_dashboard_label.set_use_markup(True)
-            device_dashboard_label.set_halign(self.gtk.Align.START)
-            dashboard_vbox.append(device_dashboard_label)
-            device_flowbox = self.gtk.FlowBox()
-            device_flowbox.set_selection_mode(self.gtk.SelectionMode.NONE)
-            device_flowbox.set_max_children_per_line(2)
-            device_flowbox.set_row_spacing(10)
-            device_flowbox.set_column_spacing(10)
-            device_flowbox.set_homogeneous(True)
-            for device in devices:
-                interface_name = device.get("GENERAL.DEVICE", "Unknown")
-                device_type = device.get("GENERAL.TYPE", "").lower()
-                state = device.get("GENERAL.STATE", "").lower()
-                if "wifi" in device_type or self._is_wireless_interface(interface_name):
-                    icon_name = "network-wireless-symbolic"
-                    if "connected" in state or "activated" in state:
-                        icon_name = "network-wireless-signal-good-symbolic"
-                elif "ethernet" in device_type or "wired" in device_type:
-                    icon_name = "network-wired-symbolic"
-                    if "connected" in state or "activated" in state:
-                        icon_name = "network-wired-activated-symbolic"
-                else:
-                    icon_name = "network-server-symbolic"
-                device_button_box = self.gtk.Box(
-                    orientation=self.gtk.Orientation.VERTICAL, spacing=5
-                )
-                device_button_box.add_css_class("network-dashboard-device-icon")
-                icon = self.gtk.Image.new_from_icon_name(icon_name)
-                icon.set_pixel_size(32)
-                label = self.gtk.Label(label=interface_name)
-                label.set_wrap(True)
-                status_label = self.gtk.Label(
-                    label=device.get("GENERAL.STATE", "Unknown").split(" (")[0]
-                )
-                status_label.add_css_class("dim-label")
-                device_button_box.append(icon)
-                device_button_box.append(label)
-                device_button_box.append(status_label)
-                device_button = self.gtk.Button()
-                device_button.set_child(device_button_box)
-                device_button.add_css_class("network-dashboard-device-button")
-                device_button.connect("clicked", self.on_device_icon_clicked, device)
-                self.gtk_helper.add_cursor_effect(device_button)
-                flowbox_child = self.gtk.FlowBoxChild()
-                flowbox_child.set_child(device_button)
-                device_flowbox.append(flowbox_child)
-            dashboard_vbox.append(device_flowbox)
-            separator = self.gtk.Separator.new(self.gtk.Orientation.HORIZONTAL)
-            dashboard_vbox.append(separator)
-            config_box = self.gtk.Box(
-                orientation=self.gtk.Orientation.HORIZONTAL, spacing=6
-            )
-            config_box.add_css_class("network-manager-config-box")
-            config_label = self.gtk.Label(label="Network Settings")
-            config_label.add_css_class("network-manager-config-label")
-            config_button = self.gtk.Button()
-            config_button.add_css_class("network-manager-config-button")
-            config_button.set_icon_name(
-                self.gtk_helper.icon_exist(
-                    "gnome-control-center-symbolic",
-                    ["org.gnome.Settings"],
-                )
-            )
-            config_box.append(config_button)
-            config_box.append(config_label)
-            self.gtk_helper.add_cursor_effect(config_button)
-            self.plugins["gestures_setup"].create_gesture(
-                config_box,
-                1,
-                lambda _: self.global_loop.create_task(self.on_config_clicked_async()),
-            )
-            self.gtk_helper.add_cursor_effect(config_box)
-            dashboard_vbox.append(config_box)
-            self.stack.add_titled(dashboard_vbox, "dashboard_view", "Dashboard")
-            self.detail_container = self.gtk.Box(
-                orientation=self.gtk.Orientation.VERTICAL, spacing=10
-            )
-            self.detail_container.set_margin_start(10)
-            self.detail_container.set_margin_end(10)
-            self.detail_container.set_margin_bottom(10)
-            detail_scroll_window = self.gtk.ScrolledWindow()
-            detail_scroll_window.set_policy(
-                self.gtk.PolicyType.NEVER, self.gtk.PolicyType.AUTOMATIC
-            )
-            detail_scroll_window.set_child(self.detail_container)
-            self.stack.add_titled(detail_scroll_window, "detail_view", "Device Details")
-            main_popover_box.append(self.stack)
-            return main_popover_box
-
-        async def populate_wifi_list_async(self):
-            """Populates the Wi-Fi list box with cached data or a status message."""
-            while child := self.wifi_list_box.get_first_child():
-                self.glib.idle_add(self.wifi_list_box.remove, child)
-            connected_ssid = await self.cli_backend.get_connected_wifi_ssid_async()
-            if connected_ssid and self.scan_status_label:
-                self.glib.idle_add(
-                    self.scan_status_label.set_label, f"Connected to: {connected_ssid}"
-                )
-            elif self.scan_status_label:
-                self.glib.idle_add(self.scan_status_label.set_label, "Wi-Fi Networks")
-            if self.scanning_in_progress and self.wifi_list_box:
-                if self.scan_status_label:
-                    self.glib.idle_add(self.scan_status_label.set_label, "Scanning...")
-                spinner = self.gtk.Spinner(spinning=True, visible=True)
-                self.glib.idle_add(self.wifi_list_box.append, spinner)
-            elif self.cached_wifi_networks and self.wifi_list_box:
-                last_scan_str = self.time.strftime(
-                    "%H:%M:%S", self.time.localtime(self.last_scan_time)
-                )
-                if not connected_ssid and self.scan_status_label:
-                    self.glib.idle_add(
-                        self.scan_status_label.set_label,
-                        f"Wi-Fi Networks (Last scan: {last_scan_str})",
+        async def refresh_async(self, rescan: bool = False) -> None:
+            """
+            Reload the radio state, networks, profiles and active connection.
+            The cached list is shown first; with ``rescan`` a fresh scan follows.
+            """
+            async with self.refresh_lock:
+                try:
+                    self.wifi_enabled = (
+                        await self.cli_backend.get_wifi_radio_enabled_async()
                     )
-                for network in self.cached_wifi_networks:
-                    network_button = self.gtk.Button()
-                    network_button.add_css_class("network-scan-item")
-                    network_box = self.gtk.Box(
-                        orientation=self.gtk.Orientation.HORIZONTAL, spacing=6
-                    )
-                    network_box.set_halign(self.gtk.Align.START)
-                    icon_name = "network-wireless-symbolic"
-                    try:
-                        signal = int(network.get("signal", 0))
-                    except (ValueError, TypeError):
-                        signal = 0
-                    if signal > 80:
-                        icon_name = "network-wireless-signal-excellent-symbolic"
-                    elif signal > 60:
-                        icon_name = "network-wireless-signal-good-symbolic"
-                    elif signal > 40:
-                        icon_name = "network-wireless-signal-ok-symbolic"
-                    else:
-                        icon_name = "network-wireless-signal-weak-symbolic"
-                    signal_icon = self.gtk.Image.new_from_icon_name(icon_name)
-                    network_box.append(signal_icon)
-                    ssid = network.get("ssid", "Unknown SSID")
-                    ssid_label = self.gtk.Label(label=f"<b>{ssid}</b>", use_markup=True)
-                    ssid_label.set_halign(self.gtk.Align.START)
-                    network_box.append(ssid_label)
-                    if ssid == connected_ssid:
-                        connected_icon = self.gtk.Image.new_from_icon_name(
-                            "object-select-symbolic"
+                    if self.wifi_enabled:
+                        ok, networks = await self.cli_backend.list_wifi_async(False)
+                        self._apply_networks(ok, networks)
+                        self.saved_wifi = await self.cli_backend.list_saved_wifi_async()
+                        self.active_connection = (
+                            await self.cli_backend.get_active_connection_async(
+                                self.wifi_networks
+                            )
                         )
-                        network_box.append(connected_icon)
-                    strength_label = self.gtk.Label(label=f"{signal}%")
-                    strength_label.set_halign(self.gtk.Align.END)
-                    network_box.append(strength_label)
-                    network_button.set_child(network_box)
-                    network_button.connect(
-                        "clicked", self.on_connect_button_clicked, ssid
+                        if rescan:
+                            self.scanning_in_progress = True
+                            self._push_render()
+                            ok, networks = await self.cli_backend.list_wifi_async(True)
+                            self._apply_networks(ok, networks)
+                            self.active_connection = (
+                                await self.cli_backend.get_active_connection_async(
+                                    self.wifi_networks
+                                )
+                            )
+                    else:
+                        self.wifi_networks = []
+                        self.saved_wifi = []
+                        self.active_connection = (
+                            await self.cli_backend.get_active_connection_async([])
+                        )
+                    self.last_scan_time = self.time.time()
+                finally:
+                    self.scanning_in_progress = False
+                    self._push_render()
+            await self.update_icon_async()
+
+        # ------------------------------------------------------------------ #
+        # Rendering (runs on the GTK thread)
+        # ------------------------------------------------------------------ #
+
+        def _render(self, force: bool = False) -> bool:
+            """
+            Redraw the page from the current state.
+            While a password prompt is open the list is left alone so a
+            background refresh cannot wipe what the user is typing.
+            """
+            self._render_current()
+            self._render_header()
+            if self.prompt_ssid is None or force:
+                self._render_list()
+            return False
+
+        def _render_current(self) -> None:
+            """Update the "Current connection" card in place."""
+            active = self.active_connection
+            if active is None:
+                self.current_name.set_label("Not connected")
+                self.current_name.add_css_class("nm-dim")
+                self.current_detail.set_label("")
+                self.disconnect_button.set_visible(False)
+                self.current_card.set_tooltip_text(None)
+                return
+            self.current_name.remove_css_class("nm-dim")
+            self.current_name.set_label(active.name or active.device)
+            parts = [
+                active.ip,
+                f"{active.signal}%" if active.signal is not None else "",
+                active.band,
+            ]
+            self.current_detail.set_label("  \u2022  ".join(p for p in parts if p))
+            self.disconnect_button.set_visible(True)
+            self.current_card.set_tooltip_text(details_text(active) or None)
+
+        def _render_header(self) -> None:
+            """Sync the Wi-Fi switch and the refresh button with the state."""
+            if self.wifi_switch.get_active() != self.wifi_enabled:
+                self._syncing_switch = True
+                self.wifi_switch.set_active(self.wifi_enabled)
+                self._syncing_switch = False
+            scanning = self.scanning_in_progress
+            self.refresh_stack.set_visible_child_name("spinner" if scanning else "icon")
+            self.refresh_spinner.set_spinning(scanning)
+            self.refresh_button.set_sensitive(self.wifi_enabled and not scanning)
+
+        def _show_message(self, icon_name: str, text: str) -> None:
+            self.message_icon.set_from_icon_name(icon_name)
+            self.message_label.set_label(text)
+            self.content_stack.set_visible_child_name("message")
+
+        def _render_list(self) -> None:
+            """Rebuild the network rows: active, then Saved, then Available."""
+            self._focus_widget = None
+            while child := self.list_box.get_first_child():
+                self.list_box.remove(child)
+            if not self.wifi_enabled:
+                self._show_message("network-wireless-disabled-symbolic", "Wi-Fi is off")
+                return
+            active, saved, available = group_entries(
+                self.wifi_networks, self.saved_wifi
+            )
+            if active is None and not saved and not available:
+                if self.scanning_in_progress:
+                    self._show_message("network-wireless-symbolic", "Scanning\u2026")
+                else:
+                    self._show_message(
+                        "network-wireless-offline-symbolic",
+                        self.list_error or "No networks found",
                     )
-                    self.glib.idle_add(self.wifi_list_box.append, network_button)
-            elif not connected_ssid and self.scan_status_label:
-                self.glib.idle_add(
-                    self.scan_status_label.set_label, "No Wi-Fi networks found."
+                return
+            if active:
+                self.list_box.append(self._build_row(active))
+            if saved:
+                self.list_box.append(self._build_section_title("Saved"))
+                for entry in saved:
+                    self.list_box.append(self._build_row(entry))
+            if available:
+                self.list_box.append(self._build_section_title("Available"))
+                for entry in available:
+                    self.list_box.append(self._build_row(entry))
+            self.content_stack.set_visible_child_name("list")
+            if self._focus_widget is not None:
+                self._focus_widget.grab_focus()
+
+        def _build_section_title(self, text: str):
+            label = self.gtk.Label(label=text)
+            label.set_halign(self.gtk.Align.START)
+            label.add_css_class("nm-section-title")
+            return label
+
+        def _build_row(self, entry: NetworkEntry):
+            """One network: a row, plus an optional password prompt and error."""
+            wrapper = self.gtk.Box(orientation=self.gtk.Orientation.VERTICAL, spacing=4)
+            row = self.gtk.Box(orientation=self.gtk.Orientation.HORIZONTAL, spacing=0)
+            row.add_css_class("nm-row")
+            if entry.in_use:
+                row.add_css_class("nm-row-active")
+            if not entry.in_range:
+                row.add_css_class("nm-row-dim")
+
+            content = self.gtk.Box(
+                orientation=self.gtk.Orientation.HORIZONTAL, spacing=10
+            )
+            content.add_css_class("nm-row-content")
+            icon_name = (
+                signal_icon(entry.signal)
+                if entry.in_range
+                else "network-wireless-offline-symbolic"
+            )
+            content.append(self.gtk.Image.new_from_icon_name(icon_name))
+            name = self.gtk.Label(label=entry.ssid)
+            name.set_halign(self.gtk.Align.START)
+            name.set_hexpand(True)
+            name.set_ellipsize(Pango.EllipsizeMode.END)
+            name.set_max_width_chars(26)
+            name.add_css_class("nm-ssid")
+            if entry.in_use:
+                name.add_css_class("nm-ssid-active")
+            content.append(name)
+            if entry.secured:
+                content.append(self.gtk.Image.new_from_icon_name(self.icon_lock))
+            percent = self.gtk.Label(
+                label=f"{entry.signal}%" if entry.in_range else "\u2014"
+            )
+            percent.add_css_class("nm-signal")
+            content.append(percent)
+
+            if entry.in_use:
+                content.set_hexpand(True)
+                row.append(content)
+            else:
+                button = self.gtk.Button()
+                button.set_child(content)
+                button.set_hexpand(True)
+                button.add_css_class("nm-row-button")
+                button.set_sensitive(entry.in_range and self.connecting_ssid is None)
+                button.connect("clicked", self._on_row_clicked, entry)
+                self.gtk_helper.add_cursor_effect(button)
+                row.append(button)
+            row.append(self._build_trailing(entry))
+            wrapper.append(row)
+
+            if self.prompt_ssid == entry.ssid and not entry.in_use:
+                wrapper.append(self._build_prompt(entry))
+            error = self.row_errors.get(entry.ssid)
+            if error:
+                label = self.gtk.Label(label=error)
+                label.set_halign(self.gtk.Align.START)
+                label.set_wrap(True)
+                label.add_css_class("nm-row-error")
+                wrapper.append(label)
+            return wrapper
+
+        def _build_trailing(self, entry: NetworkEntry):
+            """Fixed-width slot at the end of a row so every row lines up."""
+            slot = self.gtk.Box(orientation=self.gtk.Orientation.HORIZONTAL)
+            slot.set_size_request(TRAILING_SLOT_WIDTH, -1)
+            slot.set_halign(self.gtk.Align.CENTER)
+            slot.set_valign(self.gtk.Align.CENTER)
+            slot.add_css_class("nm-row-trailing")
+            if self.connecting_ssid == entry.ssid:
+                slot.append(self.gtk.Spinner(spinning=True))
+            elif entry.in_use:
+                slot.append(self.gtk.Image.new_from_icon_name("object-select-symbolic"))
+            elif entry.saved_uuid:
+                forget = self.gtk.Button.new_from_icon_name(self.icon_trash)
+                forget.add_css_class("nm-icon-button")
+                forget.set_tooltip_text("Forget network")
+                forget.connect("clicked", self._on_forget_clicked, entry)
+                self.gtk_helper.add_cursor_effect(forget)
+                slot.append(forget)
+            return slot
+
+        def _build_prompt(self, entry: NetworkEntry):
+            """Inline password entry shown under a secured, unsaved network."""
+            box = self.gtk.Box(orientation=self.gtk.Orientation.HORIZONTAL, spacing=8)
+            box.add_css_class("nm-prompt")
+            password = self.gtk.Entry()
+            password.set_visibility(False)
+            password.set_hexpand(True)
+            password.set_placeholder_text("Password")
+            password.set_input_purpose(self.gtk.InputPurpose.PASSWORD)
+            password.set_icon_from_icon_name(
+                self.gtk.EntryIconPosition.SECONDARY, "view-reveal-symbolic"
+            )
+
+            def toggle_visibility(widget, _position):
+                widget.set_visibility(not widget.get_visibility())
+
+            password.connect("icon-press", toggle_visibility)
+            connect_button = self.gtk.Button(label="Connect")
+            connect_button.add_css_class("suggested-action")
+            connect_button.add_css_class("nm-connect")
+            self.gtk_helper.add_cursor_effect(connect_button)
+
+            def submit(_widget):
+                self._submit_password(entry, password.get_text())
+
+            password.connect("activate", submit)
+            connect_button.connect("clicked", submit)
+            box.append(password)
+            box.append(connect_button)
+            self._focus_widget = password
+            return box
+
+        # ------------------------------------------------------------------ #
+        # Event handlers (GTK thread)
+        # ------------------------------------------------------------------ #
+
+        def _on_row_clicked(self, _button, entry: NetworkEntry) -> None:
+            """Connect right away, or open the password prompt for a new network."""
+            if self.connecting_ssid is not None or not entry.in_range:
+                return
+            if entry.saved_uuid or not entry.secured:
+                self._start_connect(entry, None)
+                return
+            self.prompt_ssid = None if self.prompt_ssid == entry.ssid else entry.ssid
+            self.row_errors.pop(entry.ssid, None)
+            self._render(force=True)
+
+        def _submit_password(self, entry: NetworkEntry, password: str) -> None:
+            if password:
+                self._start_connect(entry, password)
+
+        def _start_connect(self, entry: NetworkEntry, password: Optional[str]) -> None:
+            self.connecting_ssid = entry.ssid
+            self.prompt_ssid = None
+            self.row_errors.pop(entry.ssid, None)
+            self._render(force=True)
+            self.run_in_async_task(self._connect_async(entry, password))
+
+        async def _connect_async(self, entry: NetworkEntry, password: Optional[str]):
+            """Connect, show any failure on the row, then reload the state."""
+            ok, message = await self.cli_backend.connect_wifi_async(
+                entry.ssid, password, entry.saved_uuid
+            )
+            self.connecting_ssid = None
+            if not ok:
+                self.row_errors[entry.ssid] = message
+            await self.refresh_async(rescan=False)
+
+        def _on_forget_clicked(self, _button, entry: NetworkEntry) -> None:
+            if entry.saved_uuid:
+                self.run_in_async_task(self._forget_async(entry.saved_uuid))
+
+        async def _forget_async(self, uuid: str):
+            await self.cli_backend.forget_connection_async(uuid)
+            await self.refresh_async(rescan=False)
+
+        def _on_disconnect_clicked(self, _button) -> None:
+            if self.active_connection:
+                self.run_in_async_task(
+                    self._disconnect_async(self.active_connection.device)
                 )
 
-        async def update_popover_async(self):
-            """Update popover content after a scan, without updating the whole UI."""
-            await self.populate_wifi_list_async()
+        async def _disconnect_async(self, device: str):
+            await self.cli_backend.disconnect_device_async(device)
+            await self.refresh_async(rescan=False)
 
-        async def update_icon_and_popover(self):
-            """Update icon and refresh popover content."""
-            await self.update_icon_async()
-            content = await self.create_scrollable_grid_content_async()
-            self.glib.idle_add(self._set_page_content, content)
+        def _on_refresh_clicked(self, _button) -> None:
+            self.run_in_async_task(self.refresh_async(rescan=True))
 
-        def on_connect_button_clicked(self, button, ssid):
-            """UI event handler to connect to a specified Wi-Fi network."""
-            self.global_loop.create_task(self._connect_to_network_async(ssid))
+        def _on_wifi_switch(self, _switch, state: bool) -> bool:
+            """Turn the radio on or off and show the new state immediately."""
+            if self._syncing_switch:
+                return False
+            self.wifi_enabled = state
+            self.scanning_in_progress = state
+            self.prompt_ssid = None
+            if not state:
+                self.wifi_networks = []
+            self._render(force=True)
+            self.run_in_async_task(self._set_radio_async(state))
+            return False
+
+        async def _set_radio_async(self, enabled: bool):
+            ok = await self.cli_backend.set_wifi_radio_async(enabled)
+            if ok and enabled:
+                await self.asyncio.sleep(1.5)
+            await self.refresh_async(rescan=enabled)
+
+        def _on_settings_clicked(self, _button) -> None:
+            self.run_in_async_task(self.on_config_clicked_async())
 
         async def on_config_clicked_async(self, widget=None):
             """Launches the Control Center to configure the network settings."""
@@ -532,72 +726,11 @@ def get_plugin_class():
             except Exception as e:
                 self.logger.error(f"Failed to launch config tool: {e}")
 
-        async def scan_networks_and_update_cache(self):
-            """
-            Runs the CLI scan, updates the UI's cache, and refreshes the popover if visible.
-            """
-            if self.scanning_in_progress:
-                return
-            self.scanning_in_progress = True
-            if self.page_visible and self.scan_status_label:
-                self.glib.idle_add(self.scan_status_label.set_label, "Scanning...")
-            return_code, raw_output = await self.cli_backend.scan_networks_async()
-            self.scanning_in_progress = False
-            self.last_scan_time = self.time.time()
-            self.cached_wifi_networks = []
-            if return_code != 0:
-                self.logger.error(f"Error executing nmcli: {return_code}")
-                if self.scan_status_label:
-                    self.glib.idle_add(
-                        self.scan_status_label.set_label,
-                        "Error: Could not scan for networks.",
-                    )
-                return
-            output_lines = raw_output.strip().split("\n")
-            if not output_lines or output_lines[0] == "":
-                if self.scan_status_label:
-                    self.glib.idle_add(
-                        self.scan_status_label.set_label, "No Wi-Fi networks found."
-                    )
-                return
-            for line in output_lines:
-                parts = line.split(":")
-                if len(parts) >= 7:
-                    bssid_parts = parts[-6:]
-                    bssid = ":".join(bssid_parts)
-                    signal = parts[-7]
-                    ssid_parts = parts[:-7]
-                    ssid = ":".join(ssid_parts)
-                else:
-                    try:
-                        ssid, signal, bssid = line.rsplit(":", 2)
-                    except ValueError:
-                        self.logger.error(
-                            f"Skipping malformed nmcli output line: {line}"
-                        )
-                        continue
-                self.cached_wifi_networks.append(
-                    {
-                        "ssid": ssid.replace("\\", ""),
-                        "signal": signal,
-                        "bssid": bssid,
-                    }
-                )
-            if self.page_visible:
-                self.global_loop.create_task(self.update_popover_async())
-
         async def _apply_config_autoconnect_settings_async(self):
             """Applies autoconnect settings from config via the CLI backend."""
             ssids_to_autoconnect: List[str] = self.ssids_to_auto_connect
             await self.cli_backend._apply_config_autoconnect_settings_async(
                 ssids_to_autoconnect
             )
-
-        async def _connect_to_network_async(self, ssid: str):
-            """UI-side wrapper for the connection attempt."""
-            self.logger.info(f"UI: Attempting connection to {ssid}")
-            self.glib.idle_add(self.calendar.popover_calendar.popdown)
-            await self.cli_backend._connect_to_network_async(ssid)
-            await self.update_icon_and_popover()
 
     return NetworkManager
