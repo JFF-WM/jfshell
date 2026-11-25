@@ -79,6 +79,8 @@ class DockTaskbarPreview:
         entry = self._entry_of(button)
         if not self._enabled() or entry is None or not entry.running:
             return
+        if self.plugin.menu.is_open():
+            return
         self._cancel_timer("_hide_id")
         if self.is_visible() and self.button is button:
             return
@@ -197,6 +199,8 @@ class DockTaskbarPreview:
 
         entry = self._entry_of(button)
         if generation != self._generation or entry is None or entry.key != key:
+            return False
+        if self.plugin.menu.is_open():
             return False
 
         # The card under the pointer is about to disappear without a leave event.

@@ -88,6 +88,10 @@ class DockTaskbarMenu:
         self._unparent()
         self.audio.close()
 
+    def is_open(self):
+        """Whether a context menu is on screen."""
+        return bool(self.popover and self.popover.get_visible())
+
     def popdown(self):
         """Hides the menu."""
         if self.popover is not None:
