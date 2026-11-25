@@ -1,0 +1,163 @@
+/* Weather page. Colours come from the active theme (text colour is inherited
+   and tinted with alpha(currentColor, ...)), so every theme works unchanged.
+   Classes use the wx- prefix so they never clash with the old weather.css. */
+
+.wx-page {
+  min-width: 340px;
+}
+
+.wx-card {
+  padding: 14px 16px 12px 16px;
+}
+
+/* Header */
+.wx-location {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.wx-updated,
+.wx-footer,
+.wx-hint,
+.wx-result-coords {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.wx-footer {
+  margin-top: 2px;
+}
+
+.wx-icon-button {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.wx-icon-button:hover {
+  background-color: alpha(currentColor, 0.12);
+}
+
+/* Current conditions */
+.wx-hero-icon {
+  font-size: 54px;
+}
+
+.wx-hero-temp {
+  font-size: 40px;
+  font-weight: 700;
+}
+
+.wx-condition {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wx-range {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* Hourly strip */
+.wx-hours {
+  padding: 2px 0 6px 0;
+}
+
+.wx-hour {
+  min-width: 54px;
+  padding: 8px 6px;
+  border-radius: 12px;
+  background-color: alpha(currentColor, 0.06);
+}
+
+.wx-hour-now {
+  background-color: alpha(currentColor, 0.14);
+  box-shadow: inset 0 0 0 1px var(--theme-status-accent, #3584e4);
+}
+
+.wx-hour-time {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.wx-hour-icon {
+  font-size: 20px;
+}
+
+.wx-hour-temp {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wx-hour-rain {
+  font-size: 10px;
+  opacity: 0.65;
+}
+
+/* Detail tiles */
+.wx-tile {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background-color: alpha(currentColor, 0.06);
+}
+
+.wx-tile-title {
+  font-size: 11px;
+  opacity: 0.65;
+}
+
+.wx-tile-value {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.wx-rain {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.wx-status,
+.wx-error {
+  font-size: 12px;
+  color: var(--theme-status-error, #e5484d);
+}
+
+/* Settings view */
+.wx-section {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.6;
+}
+
+.wx-field {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.wx-button {
+  border-radius: 8px;
+  padding: 4px 14px;
+}
+
+.wx-results {
+  background: transparent;
+}
+
+.wx-results row {
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.wx-results row:hover {
+  background-color: alpha(currentColor, 0.1);
+}
+
+.wx-result-name {
+  font-size: 13px;
+  font-weight: 600;
+}
