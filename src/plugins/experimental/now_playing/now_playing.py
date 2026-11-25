@@ -21,6 +21,7 @@ def get_plugin_class():
     import gi
     import gc
     import math
+    import time
 
     gi.require_version("Gtk", "4.0")
     from gi.repository import Gtk, GLib, GdkPixbuf, Gio, Pango, Gdk
@@ -28,8 +29,80 @@ def get_plugin_class():
     from src.shared.dbus_helpers import DbusHelpers
     from dbus_fast.aio import MessageBus
     from dbus_fast import BusType
+    from ._player_format import (
+        estimate_position,
+        format_time,
+        marquee_offset,
+        player_name,
+        progress_fraction,
+    )
 
     PAGE_ID = "now_playing"
+
+    class MarqueeLabel(Gtk.ScrolledWindow):
+        """
+        Fixed width label that scrolls back and forth when its text is too long.
+
+        The width is set once and never depends on the text, so the page does not
+        resize while the text moves. The animation only runs while the label is
+        on screen.
+        """
+
+        SPEED = 28.0
+        PAUSE_US = 1_500_000
+
+        def __init__(self, width, css_class):
+            super().__init__()
+            self._width = width
+            self._tick_id = 0
+            self._start_us = None
+            self.set_policy(Gtk.PolicyType.EXTERNAL, Gtk.PolicyType.NEVER)
+            self.set_kinetic_scrolling(False)
+            self.set_propagate_natural_height(True)
+            self.set_size_request(width, -1)
+            self.set_halign(Gtk.Align.CENTER)
+            self.label = Gtk.Label()
+            self.label.add_css_class(css_class)
+            self.label.set_hexpand(True)
+            self.label.set_xalign(0.5)
+            self.set_child(self.label)
+            self.connect("map", lambda *_: self._restart())
+            self.connect("unmap", lambda *_: self._stop())
+
+        def set_text(self, text):
+            """
+            Shows new text and restarts the animation when it does not fit.
+            """
+            if text == self.label.get_text():
+                return
+            self.label.set_text(text)
+            self._restart()
+
+        def _restart(self):
+            self._stop()
+            self.get_hadjustment().set_value(0)
+            if not self.get_mapped():
+                return
+            natural = self.label.measure(Gtk.Orientation.HORIZONTAL, -1)[1]
+            if natural > self._width:
+                self._tick_id = self.add_tick_callback(self._on_tick)
+
+        def _stop(self):
+            if self._tick_id:
+                self.remove_tick_callback(self._tick_id)
+                self._tick_id = 0
+            self._start_us = None
+
+        def _on_tick(self, _widget, frame_clock):
+            now = frame_clock.get_frame_time()
+            if self._start_us is None:
+                self._start_us = now
+            adj = self.get_hadjustment()
+            span = adj.get_upper() - adj.get_page_size()
+            adj.set_value(
+                marquee_offset(now - self._start_us, span, self.SPEED, self.PAUSE_US)
+            )
+            return True
 
     class PlayerRow(Gtk.Box):
         """
@@ -43,11 +116,20 @@ def get_plugin_class():
             self.last_art_url = None
             self.current_pid = None
             self.current_title = None
-            self._scroll_pos = 0
-            self._full_title = ""
-            self._full_artist = ""
-            self._scroll_timer = None
+            self._progress_timer = None
+            self._position = 0
+            self._position_at = 0.0
+            self._length = 0
+            self._playing = False
             self._setup_ui()
+
+        def stop(self):
+            """
+            Stops the progress timer of this row.
+            """
+            if self._progress_timer:
+                GLib.source_remove(self._progress_timer)
+                self._progress_timer = None
 
         def add_cursor_effect(self, widget):
             """
@@ -101,11 +183,24 @@ def get_plugin_class():
             motion.connect("leave", handle_event)
             widget.add_controller(motion)
 
+        def _small(self, label):
+            """
+            Makes a label smaller and dimmer than the title and artist.
+            """
+            attrs = Pango.AttrList()
+            attrs.insert(Pango.attr_scale_new(0.85))
+            label.set_attributes(attrs)
+            label.set_opacity(0.7)
+
         def _setup_ui(self):
             """
             Constructs the layout for the player row including art, controls, and labels.
             """
             self.add_css_class("player-row")
+            self.set_hexpand(True)
+            self.set_valign(Gtk.Align.CENTER)
+            art_size = self.plugin.art_size
+            text_width = art_size + 60
 
             header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
             header.set_valign(Gtk.Align.START)
@@ -128,8 +223,8 @@ def get_plugin_class():
             self.art_button.connect("clicked", self._on_art_clicked)
 
             self.art_image = Gtk.Image()
-            self.art_image.set_pixel_size(120)
-            self.art_image.set_size_request(120, 120)
+            self.art_image.set_pixel_size(art_size)
+            self.art_image.set_size_request(art_size, art_size)
             self.art_image.add_css_class("player-art")
             self.art_button.set_child(self.art_image)
 
@@ -138,20 +233,33 @@ def get_plugin_class():
             art_center_box.append(self.art_button)
             self.append(art_center_box)
 
-            info_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            info_vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
             info_vbox.set_halign(Gtk.Align.CENTER)
 
-            self.title_label = Gtk.Label(label="Unknown Title")
-            self.title_label.add_css_class("player-title")
-            self.title_label.set_xalign(0.5)
-            self.title_label.set_max_width_chars(25)
-            self.title_label.set_ellipsize(Pango.EllipsizeMode.NONE)
+            self.title_label = MarqueeLabel(text_width, "player-title")
+            self.title_label.set_text("Unknown Title")
+            self.artist_label = MarqueeLabel(text_width, "player-artist")
+            self.artist_label.set_text("Unknown Artist")
+            self.album_label = MarqueeLabel(text_width, "player-album")
+            self._small(self.album_label.label)
 
-            self.artist_label = Gtk.Label(label="Unknown Artist")
-            self.artist_label.add_css_class("player-artist")
-            self.artist_label.set_xalign(0.5)
-            self.artist_label.set_max_width_chars(25)
-            self.artist_label.set_ellipsize(Pango.EllipsizeMode.NONE)
+            self.progress_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            self.progress_box.set_size_request(text_width, -1)
+            self.progress_box.set_halign(Gtk.Align.CENTER)
+            self.progress_box.set_visible(False)
+            self.time_now = Gtk.Label(label="0:00", xalign=0)
+            self.time_total = Gtk.Label(label="0:00", xalign=1)
+            for lbl in (self.time_now, self.time_total):
+                lbl.add_css_class("player-time")
+                lbl.set_width_chars(5)
+                self._small(lbl)
+            self.progress = Gtk.ProgressBar()
+            self.progress.add_css_class("player-progress")
+            self.progress.set_hexpand(True)
+            self.progress.set_valign(Gtk.Align.CENTER)
+            self.progress_box.append(self.time_now)
+            self.progress_box.append(self.progress)
+            self.progress_box.append(self.time_total)
 
             controls_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=15)
             controls_box.set_halign(Gtk.Align.CENTER)
@@ -168,6 +276,8 @@ def get_plugin_class():
 
             info_vbox.append(self.title_label)
             info_vbox.append(self.artist_label)
+            info_vbox.append(self.album_label)
+            info_vbox.append(self.progress_box)
             info_vbox.append(controls_box)
             self.append(info_vbox)
 
@@ -226,17 +336,23 @@ def get_plugin_class():
             self.current_pid = data.get("pid")
             self.current_title = title
 
-            if title != self._full_title or artist != self._full_artist:
-                self._full_title, self._full_artist = title, artist
-                self._scroll_pos = 0
-                self._start_marquee()
+            self.title_label.set_text(title)
+            self.artist_label.set_text(artist)
+            album = data.get("album") or ""
+            subtitle = " · ".join(
+                part for part in (album, player_name(self.service_name)) if part
+            )
+            self.album_label.set_text(subtitle)
+            self.album_label.set_visible(bool(subtitle))
 
+            self._playing = data.get("status") == "Playing"
             icon = (
                 "media-playback-playing-symbolic"
-                if data.get("status") == "Playing"
+                if self._playing
                 else "media-playback-start-symbolic"
             )
             self.btn_play.set_icon_name(icon)
+            self._update_progress(data.get("position"), data.get("length"))
 
             art_url = data.get("art_url")
             if art_url and art_url != self.last_art_url:
@@ -249,33 +365,50 @@ def get_plugin_class():
                 )
                 self.art_image.set_from_icon_name(icon_name)
 
-        def _start_marquee(self):
+        def _update_progress(self, position, length):
             """
-            Initiates the marquee animation if labels exceed the width limit.
+            Syncs the progress bar with the player. Without a position or a
+            length (live streams) the bar is hidden.
             """
-            if self._scroll_timer:
-                GLib.source_remove(self._scroll_timer)
-            if len(self._full_title) > 25 or len(self._full_artist) > 25:
-                self._scroll_timer = GLib.timeout_add(250, self._on_marquee_tick)
-            else:
-                self.title_label.set_text(self._full_title)
-                self.artist_label.set_text(self._full_artist)
+            has_progress = (
+                isinstance(position, int)
+                and isinstance(length, int)
+                and length > 0
+            )
+            self.progress_box.set_visible(has_progress)
+            if not has_progress:
+                self.stop()
+                return
+            self._position = position
+            self._length = length
+            self._position_at = time.monotonic()
+            self.time_total.set_text(format_time(length))
+            self._refresh_progress()
+            if not self._progress_timer:
+                self._progress_timer = GLib.timeout_add(500, self._on_progress_tick)
 
-        def _on_marquee_tick(self):
+        def _refresh_progress(self):
             """
-            Handles the text shifting logic for the marquee animation.
+            Shows the estimated position between two polls of the player.
             """
-            self._scroll_pos += 1
+            position = estimate_position(
+                self._position,
+                time.monotonic() - self._position_at,
+                self._playing,
+                self._length,
+            )
+            self.time_now.set_text(format_time(position))
+            self.progress.set_fraction(progress_fraction(position, self._length))
 
-            def shift(text, limit=25):
-                if len(text) <= limit:
-                    return text
-                p = text + "     "
-                i = self._scroll_pos % len(p)
-                return (p[i:] + p[:i])[:limit]
-
-            self.title_label.set_text(shift(self._full_title))
-            self.artist_label.set_text(shift(self._full_artist))
+        def _on_progress_tick(self):
+            """
+            Keeps the progress bar moving while the page is visible.
+            """
+            if not self.progress_box.get_visible():
+                self._progress_timer = None
+                return False
+            if self.get_mapped():
+                self._refresh_progress()
             return True
 
         def _load_art_async(self, url):
@@ -286,7 +419,11 @@ def get_plugin_class():
             def _done(s, r):
                 try:
                     pix = GdkPixbuf.Pixbuf.new_from_stream_at_scale(
-                        s.read_finish(r), 120, 120, True, None
+                        s.read_finish(r),
+                        self.plugin.art_size,
+                        self.plugin.art_size,
+                        True,
+                        None,
                     )
                     self.plugin.schedule_in_gtk_thread(
                         lambda: self.art_image.set_from_pixbuf(pix)
@@ -318,8 +455,15 @@ def get_plugin_class():
             self.max_height = int(
                 self.get_plugin_setting_add_hint(
                     ["max_height"],
-                    320,
+                    480,
                     "Height in pixels the media page grows to before it scrolls.",
+                )
+            )
+            self.art_size = int(
+                self.get_plugin_setting_add_hint(
+                    ["art_size"],
+                    200,
+                    "Size in pixels of the album art on the media page.",
                 )
             )
             self.popover_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
@@ -415,8 +559,7 @@ def get_plugin_class():
             """
             row = self.active_rows.pop(p, None)
             if row:
-                if row._scroll_timer:
-                    GLib.source_remove(row._scroll_timer)
+                row.stop()
                 if row.get_parent() == self.popover_box:
                     self.popover_box.remove(row)
                 gc.collect()
@@ -443,8 +586,7 @@ def get_plugin_class():
             Cleans up active timers and UI elements when the plugin is stopped.
             """
             for r in self.active_rows.values():
-                if r._scroll_timer:
-                    GLib.source_remove(r._scroll_timer)
+                r.stop()
             self.active_rows.clear()
             if self.calendar:
                 self.calendar.remove_page(PAGE_ID)

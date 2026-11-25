@@ -21,6 +21,7 @@ class DbusHelpers:
         <property name="CanPlay" type="b" access="read"/>
         <property name="CanPause" type="b" access="read"/>
         <property name="CanControl" type="b" access="read"/>
+        <property name="Position" type="x" access="read"/>
       </interface>
     </node>
     """
@@ -104,6 +105,12 @@ class DbusHelpers:
             can_next = await iface.get_can_go_next()
             can_prev = await iface.get_can_go_previous()
 
+            try:
+                position = int(await iface.get_position())
+            except Exception:
+                # Optional in MPRIS and missing on some players.
+                position = None
+
             def v(key, default=None):
                 if key in raw_meta:
                     val = raw_meta[key].value
@@ -116,6 +123,9 @@ class DbusHelpers:
                 "title": v("xesam:title", "Unknown"),
                 "artist": v("xesam:artist", "Unknown"),
                 "art_url": v("mpris:artUrl", ""),
+                "album": v("xesam:album", ""),
+                "length": v("mpris:length", 0),
+                "position": position,
                 "status": status,
                 "can_next": can_next,
                 "can_prev": can_prev,
