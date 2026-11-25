@@ -26,3 +26,4 @@ lazy-loader
 distro
 tldextract
 pyamdgpuinfo
+pulsectl

@@ -1,54 +1,137 @@
-/* Bluetooth */
+/* Bluetooth page of the clock popover.
+   Colors come from the active theme. Each rule with color-mix() has a plain
+   rgba() line before it, which is what older GTK versions fall back to. */
 
-/* Dashboard popover (built by gtk_helper dashboard helper) */
-.bluetooth-dashboard-popover.background > contents {
-  background-color: var(--color-bg-popover);
-  border: 1px solid var(--color-separator-line);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-window-float);
+.bt-page {
+  min-width: 360px;
+  padding: 10px;
 }
 
-.bluetooth-dashboard-popover.background > arrow {
-  background-color: var(--color-bg-popover);
-  border: 1px solid var(--color-separator-line);
+.bt-card {
+  padding: 14px 14px 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid color-mix(in srgb, var(--main-text) 10%, transparent);
+  background-color: rgba(255, 255, 255, 0.04);
+  background-color: color-mix(in srgb, var(--main-text) 4%, transparent);
 }
 
-/* Device rows (Gtk.Box with a click gesture, not real buttons) */
-.bluetooth-dashboard-buttons {
-  min-width: 240px;
-  padding: 8px 12px;
-  margin: 2px 0;
-  background-color: var(--theme-bg-view-secondary);
-  border: 1px solid var(--color-separator-line);
-  border-radius: var(--radius-l);
-  color: var(--theme-fg-label-primary);
+.bt-card-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.bt-dim {
+  opacity: 0.6;
+}
+
+/* ---- Header buttons ---------------------------------------------------- */
+
+.bt-icon-button {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 8px;
+  border: none;
   box-shadow: none;
-  transition: all 150ms ease-out;
+  background-image: none;
+  background-color: transparent;
+  opacity: 0.75;
+  transition: background-color 150ms ease, opacity 150ms ease;
 }
 
-.bluetooth-dashboard-buttons label {
-  color: var(--theme-fg-label-primary);
+.bt-icon-button:hover {
+  opacity: 1;
+  background-color: rgba(255, 255, 255, 0.08);
+  background-color: color-mix(in srgb, var(--main-text) 10%, transparent);
 }
 
-.bluetooth-dashboard-buttons image {
-  color: var(--theme-fg-label-secondary);
+.bt-icon-button:disabled {
+  opacity: 0.4;
 }
 
-.bluetooth-dashboard-buttons:hover {
-  background-color: var(--color-bg-button-flat-hover);
+.bt-card switch:checked {
+  background-color: var(--theme-status-accent, #3584e4);
 }
 
-/* Connected: quiet accent (border + icon) instead of a loud filled pill */
-.bluetooth-dashboard-buttons-connected {
-  background-color: var(--theme-bg-view-secondary);
-  border-color: var(--theme-status-accent);
-  box-shadow: inset 3px 0 0 0 var(--theme-status-accent);
+/* ---- List -------------------------------------------------------------- */
+
+.bt-scroll {
+  margin: 0 -4px;
 }
 
-.bluetooth-dashboard-buttons-connected image {
-  color: var(--theme-status-accent);
+.bt-scroll > viewport > box {
+  padding: 0 4px;
 }
 
-.bluetooth-dashboard-buttons-connected:hover {
-  background-color: var(--color-bg-button-flat-hover);
+.bt-section-title {
+  margin: 10px 4px 2px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+}
+
+.bt-row {
+  min-height: 46px;
+  border-radius: 11px;
+  background-color: rgba(0, 0, 0, 0.22);
+  background-color: color-mix(in srgb, var(--primary-bg) 55%, transparent);
+  transition: background-color 150ms ease;
+}
+
+.bt-row-active {
+  background-color: rgba(255, 255, 255, 0.06);
+  background-color: color-mix(in srgb, var(--main-text) 7%, transparent);
+}
+
+.bt-row-content {
+  padding: 0 4px 0 12px;
+  min-height: 46px;
+}
+
+.bt-row-button {
+  padding: 0;
+  min-height: 46px;
+  border: none;
+  border-radius: 11px;
+  box-shadow: none;
+  background-image: none;
+  background-color: transparent;
+  transition: background-color 150ms ease;
+}
+
+.bt-row-button:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+  background-color: color-mix(in srgb, var(--main-text) 8%, transparent);
+}
+
+.bt-row-button:disabled {
+  opacity: 0.55;
+}
+
+.bt-name-active {
+  font-weight: 700;
+}
+
+.bt-battery {
+  opacity: 0.75;
+  font-feature-settings: "tnum";
+}
+
+.bt-row-trailing {
+  margin-right: 6px;
+}
+
+.bt-row-error {
+  margin: 0 4px 4px 12px;
+  font-size: 12px;
+  color: #f66151;
+}
+
+/* ---- Empty / off state -------------------------------------------------- */
+
+.bt-message {
+  min-height: 180px;
+  opacity: 0.7;
 }
