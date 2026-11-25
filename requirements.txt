@@ -27,3 +27,4 @@ distro
 tldextract
 pyamdgpuinfo
 pulsectl
+holidays
