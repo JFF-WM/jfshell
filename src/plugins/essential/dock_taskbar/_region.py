@@ -46,13 +46,16 @@ def region_rect(bounds, size):
 class DockTaskbarRegion:
     """Keeps the input region of the dock's window on the dock."""
 
-    def __init__(self, plugin_instance):
+    def __init__(self, plugin_instance, get_dock=None):
         """Initializes the handler.
 
         Args:
             plugin_instance: The DockTaskbarPlugin instance.
+            get_dock: Returns the dock this handler follows. Defaults to the
+                plugin's own dock; the copies on other monitors pass theirs.
         """
         self.plugin = plugin_instance
+        self._get_dock = get_dock or (lambda: plugin_instance.dock)
         self._map_id = 0
         self._idle_id = 0
         self._surface = None
@@ -62,7 +65,7 @@ class DockTaskbarRegion:
 
     def start(self):
         """Follows the dock; the first update waits for it to be on screen."""
-        dock = self.plugin.dock
+        dock = self._get_dock()
         self._map_id = dock.connect("map", lambda *_: self.request())
         if dock.get_mapped():
             self.request()
@@ -84,7 +87,7 @@ class DockTaskbarRegion:
         return False
 
     def _update(self):
-        dock = self.plugin.dock
+        dock = self._get_dock()
         window = dock.get_root()
         surface = window.get_surface() if window is not None else None
         if surface is None:
@@ -104,12 +107,12 @@ class DockTaskbarRegion:
 
     def _target(self):
         """The widget whose rectangle takes the input: the panel's box, else the dock."""
-        node = self.plugin.dock.get_parent()
+        node = self._get_dock().get_parent()
         while node is not None:
             if node.has_css_class(PANEL_BOX_CLASS):
                 return node
             node = node.get_parent()
-        return self.plugin.dock
+        return self._get_dock()
 
     def _follow(self, surface):
         """Updates again whenever the window changes size (apps come and go)."""
@@ -139,7 +142,7 @@ class DockTaskbarRegion:
             self._idle_id = 0
         if self._map_id:
             try:
-                self.plugin.dock.disconnect(self._map_id)
+                self._get_dock().disconnect(self._map_id)
             except Exception:
                 pass
             self._map_id = 0
@@ -147,7 +150,7 @@ class DockTaskbarRegion:
         self._unfollow()
         if surface is not None and self._rect is not None:
             try:
-                window = self.plugin.dock.get_root()
+                window = self._get_dock().get_root()
                 if window is not None:
                     self._set(surface, (0, 0, window.get_width(), window.get_height()))
             except Exception as e:

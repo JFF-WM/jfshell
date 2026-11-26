@@ -184,7 +184,9 @@ class DockTaskbarPreview:
         """Rebuilds the open thumbnails when the windows of their group changed."""
         if not self.is_visible() or self.key != key or self.button is None:
             return
-        shown = tuple(v.get("id") for v in views[: self.plugin.config.preview_max_windows])
+        shown = tuple(
+            v.get("id") for v in views[: self.plugin.config.preview_max_windows]
+        )
         if shown != self._ids:
             if shown:
                 self._start_load(self.button)
@@ -277,7 +279,9 @@ class DockTaskbarPreview:
             # jff cannot draw this window (or has no thumbnail command): show its icon.
             body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             body.add_css_class("dock-preview-placeholder")
-            body.set_size_request(min(cfg.preview_width, 200), min(cfg.preview_height, 120))
+            body.set_size_request(
+                min(cfg.preview_width, 200), min(cfg.preview_height, 120)
+            )
             big = Gtk.Image()
             self.plugin.ui._set_icon(big, self.plugin.icon_for(entry), 64)
             big.set_hexpand(True)
@@ -318,7 +322,9 @@ class DockTaskbarPreview:
                 self._clear_effect()
                 helper.view_focus_effect_selected(view, 0.9, True)
                 self._effect_view = view
-            elif self._effect_view is not None and self._effect_view.get("id") == view.get("id"):
+            elif self._effect_view is not None and self._effect_view.get(
+                "id"
+            ) == view.get("id"):
                 self._clear_effect()
         except Exception as e:
             self.plugin.logger.debug(f"Preview peek failed: {e}")
@@ -326,7 +332,9 @@ class DockTaskbarPreview:
     def _clear_effect(self):
         view, self._effect_view = self._effect_view, None
         if view is not None:
-            self.plugin.compositor_helper.view_focus_effect_selected(view, selected=False)
+            self.plugin.compositor_helper.view_focus_effect_selected(
+                view, selected=False
+            )
 
     def _position(self):
         from gi.repository import Gtk
@@ -351,7 +359,9 @@ class DockTaskbarPreview:
         self._frames = 0
         self._frames_since = time.monotonic()
         if fps > 0 and self._pictures:
-            self._refresh_id = GLib.timeout_add(max(1, round(1000 / fps)), self._refresh)
+            self._refresh_id = GLib.timeout_add(
+                max(1, round(1000 / fps)), self._refresh
+            )
 
     def _refresh(self):
         """Timer callback: redraw the open preview, or close it if its button is gone."""
@@ -360,7 +370,7 @@ class DockTaskbarPreview:
             not self.is_visible()
             or button is None
             or not button.get_visible()
-            or button not in self.plugin.widgets.values()
+            or button not in self.plugin.all_widgets()
         ):
             self._refresh_id = 0
             self.hide()

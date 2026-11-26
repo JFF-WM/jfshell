@@ -6,6 +6,21 @@ from typing import Any
 from ._model import state_flags
 
 
+class DockBar:
+    """The bar of a copy of the panel on another monitor.
+
+    The bar of the main panel window is the plugin itself; it has the same
+    attributes, so the UI code treats both alike.
+    """
+
+    def __init__(self, output: str) -> None:
+        self.output = output
+        self.dock: Any = None
+        self.widgets: dict = {}
+        self.launcher_button: Any = None
+        self.region: Any = None
+
+
 class DockTaskbarUI:
     """Builds the bar and keeps its buttons in step with the entries."""
 
@@ -53,33 +68,51 @@ class DockTaskbarUI:
 
     # --- layout ---
 
-    def create_layout(self):
-        """Creates the box that holds every button (``plugin.dock``)."""
+    def create_layout(self, bar=None):
+        """Creates the box that holds every button (``bar.dock``).
+
+        Args:
+            bar: The bar to build (``dock``, ``widgets`` and ``launcher_button``
+                are its attributes). Defaults to the plugin itself, which is the
+                bar of the main panel window; the others are the copies on the
+                other monitors.
+        """
         from gi.repository import Gtk
 
-        p = self.plugin
-        p.dock = Gtk.Box(
+        bar = bar or self.plugin
+        bar.dock = Gtk.Box(
             orientation=Gtk.Orientation.HORIZONTAL, spacing=self.config.spacing
         )
-        p.dock.add_css_class("dock-taskbar")
-        p.dock.set_halign(Gtk.Align.CENTER)
-        p.dock.set_valign(Gtk.Align.CENTER)
+        bar.dock.add_css_class("dock-taskbar")
+        bar.dock.set_halign(Gtk.Align.CENTER)
+        bar.dock.set_valign(Gtk.Align.CENTER)
         self._install_badge_css()
 
-    def attach_launcher(self):
+    def attach_launcher(self, bar=None):
         """Pins the app launcher button as the first, fixed item of the bar.
 
         The button gets the same layout as the app buttons (icon plus the dots
-        row), so its icon lines up with the others.
+        row), so its icon lines up with the others. The main bar uses the
+        launcher's own button; the copies on other monitors get a button of
+        their own that opens the same popover.
         """
         from gi.repository import Gtk
 
         p = self.plugin
-        p.launcher_button = None
+        bar = bar or p
+        bar.launcher_button = None
         if "app_launcher" not in p.plugins:
             return
-        button = p.plugins["app_launcher"].appmenu
-        icon_name = button.get_icon_name() or "start-here"
+        if bar is p:
+            button = p.plugins["app_launcher"].appmenu
+            # Setting the child below clears the icon name of the button.
+            p.launcher_icon = button.get_icon_name() or "start-here"
+        else:
+            button = Gtk.Button()
+            button.add_css_class("app-launcher-menu-button")
+            button.connect("clicked", lambda b: p.open_launcher(b))
+            p.gtk_helper.add_cursor_effect(button)
+        icon_name = p.launcher_icon
         image = Gtk.Image.new_from_icon_name(icon_name)
         image.set_pixel_size(self.config.icon_size)
         dots = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=3)
@@ -99,8 +132,8 @@ class DockTaskbarUI:
         button.set_valign(Gtk.Align.CENTER)
         button.set_hexpand(False)
         button.set_vexpand(False)
-        p.dock.append(button)
-        p.launcher_button = button
+        bar.dock.append(button)
+        bar.launcher_button = button
 
     def _install_badge_css(self):
         """Registers the built-in badge style once for the whole display."""
@@ -265,50 +298,61 @@ class DockTaskbarUI:
 
     # --- syncing ---
 
-    def apply(self, entries):
-        """Creates, updates, removes and orders the widgets so they mirror ``entries``."""
-        p = self.plugin
+    def apply(self, entries, bar=None):
+        """Creates, updates, removes and orders the widgets so they mirror ``entries``.
+
+        Args:
+            entries: What the bar shows.
+            bar: The bar to update (defaults to the plugin's own).
+        """
+        bar = bar or self.plugin
         wanted = {e.key for e in entries}
-        for key in [k for k in p.widgets if k not in wanted]:
-            self._remove(key)
+        for key in [k for k in bar.widgets if k not in wanted]:
+            self._remove(key, bar)
 
         desired = []
         for entry in entries:
-            widget = p.widgets.get(entry.key)
+            widget = bar.widgets.get(entry.key)
             if widget is None:
                 widget = (
                     self.create_separator()
                     if entry.kind == "separator"
                     else self.create_button(entry)
                 )
-                p.widgets[entry.key] = widget
-                p.dock.append(widget)
+                bar.widgets[entry.key] = widget
+                bar.dock.append(widget)
             if entry.kind != "separator":
                 self.update_button(widget, entry)
             desired.append(widget)
 
         current = []
-        child = p.dock.get_first_child()
+        child = bar.dock.get_first_child()
         while child is not None:
-            if child is not p.launcher_button:
+            if child is not bar.launcher_button:
                 current.append(child)
             child = child.get_next_sibling()
         if current != desired:
             # The launcher button stays first.
-            previous = p.launcher_button
+            previous = bar.launcher_button
             for widget in desired:
-                p.dock.reorder_child_after(widget, previous)
+                bar.dock.reorder_child_after(widget, previous)
                 previous = widget
 
-    def _remove(self, key):
+    def clear(self, bar):
+        """Removes every button of a bar (it is going away)."""
+        for key in list(bar.widgets):
+            self._remove(key, bar)
+
+    def _remove(self, key, bar=None):
         p = self.plugin
-        widget = p.widgets.pop(key, None)
+        bar = bar or p
+        widget = bar.widgets.pop(key, None)
         if widget is None:
             return
         # Popovers parented to the widget have to go first, or GTK complains.
         p.preview.forget(widget)
         p.menu.forget(widget)
-        p.dock.remove(widget)
+        bar.dock.remove(widget)
 
     def update_button(self, button, entry):
         """Writes the visible state of an entry to its button, skipping no-op updates."""

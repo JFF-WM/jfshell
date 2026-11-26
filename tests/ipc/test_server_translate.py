@@ -82,3 +82,71 @@ class DbusAnnotationTests(unittest.TestCase):
         state = {"windows": {}, "overview": False}
         out = _run([{"event": "dbus-annotation", **_ann(1)}], state)
         assert out[0]["annotation"]["id"] == 1
+
+
+class OverviewOutputTests(unittest.TestCase):
+    def test_an_event_carries_the_monitor(self):
+        (msg,) = _run([{"event": "overview", "open": True, "output": "DP-1"}])
+        assert msg["event"] == "overview-changed"
+        assert msg["state"] is True
+        assert msg["output"] == "DP-1"
+        assert msg["payload"] == {"is_open": True, "output": "DP-1"}
+
+    def test_closing_reports_the_monitor_it_was_open_on(self):
+        state = _state()
+        _run([{"event": "overview", "open": True, "output": "DP-1"}], state)
+        (msg,) = _run([{"event": "overview", "open": False}], state)
+        assert msg["state"] is False
+        assert msg["output"] == "DP-1"
+        assert state["overview_output"] is None
+
+    def test_moving_to_another_monitor_sends_a_new_event(self):
+        out = _run(
+            [
+                {"event": "overview", "open": True, "output": "DP-1"},
+                {"event": "overview", "open": True, "output": "DP-2"},
+            ]
+        )
+        assert [m["output"] for m in out] == ["DP-1", "DP-2"]
+        assert all(m["state"] for m in out)
+
+    def test_the_snapshot_reports_the_monitor(self):
+        snap = {
+            "event": "snapshot",
+            "windows": [],
+            "overview": True,
+            "overview_output": "DP-2",
+        }
+        (msg,) = _run([snap])
+        assert msg["state"] is True
+        assert msg["output"] == "DP-2"
+
+    def test_a_snapshot_with_the_same_overview_says_nothing(self):
+        state = _state()
+        snap = {
+            "event": "snapshot",
+            "windows": [],
+            "overview": True,
+            "overview_output": "DP-2",
+        }
+        _run([snap], state)
+        assert _run([snap], state) == []
+
+    def test_a_snapshot_that_moves_the_overview_reports_it(self):
+        state = _state()
+        base = {"event": "snapshot", "windows": [], "overview": True}
+        _run([{**base, "overview_output": "DP-1"}], state)
+        (msg,) = _run([{**base, "overview_output": "DP-2"}], state)
+        assert msg["output"] == "DP-2"
+
+    def test_a_snapshot_that_closes_it_reports_the_old_monitor(self):
+        state = _state()
+        base = {"event": "snapshot", "windows": []}
+        _run([{**base, "overview": True, "overview_output": "DP-1"}], state)
+        (msg,) = _run([{**base, "overview": False, "overview_output": None}], state)
+        assert msg["state"] is False
+        assert msg["output"] == "DP-1"
+
+    def test_an_old_jff_without_the_field_gives_no_monitor(self):
+        (msg,) = _run([{"event": "overview", "open": True}])
+        assert msg["output"] is None

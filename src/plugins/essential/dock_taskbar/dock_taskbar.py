@@ -43,7 +43,7 @@ def get_plugin_class():
     )
     from ._preview import DockTaskbarPreview
     from ._region import DockTaskbarRegion
-    from ._ui import DockTaskbarUI
+    from ._ui import DockBar, DockTaskbarUI
 
     # The launcher list of the old dockbar, used until this plugin saves its own.
     DOCKBAR_ID = "org.jfshell.plugin.dockbar"
@@ -79,6 +79,10 @@ def get_plugin_class():
             self._audio_id = 0
             self._config_monitor = None
             self._last_config_mtime = 0.0
+            # output -> DockBar of the copies of the panel on the other monitors
+            self.mirror_bars = {}
+            self._mirror_host = None
+            self.launcher_icon = "start-here"
 
             self.config = DockTaskbarConfig(self)
             self.config.register_settings()
@@ -103,6 +107,108 @@ def get_plugin_class():
             self._setup_exclusive_zone()
             if self.config.blur_to_dock:
                 self.region.start()
+            self._setup_mirrors()
+
+        # --- one bar per monitor ---
+
+        def all_bars(self):
+            """The bar of the main panel window, then the copies on other monitors.
+
+            Each has ``dock``, ``widgets``, ``launcher_button`` and ``region``.
+            """
+            return [self, *self.mirror_bars.values()]
+
+        def all_widgets(self):
+            """Every icon button and separator of every bar."""
+            return [w for bar in self.all_bars() for w in bar.widgets.values()]
+
+        def _setup_mirrors(self):
+            """Asks the bottom panel for a window on every other monitor."""
+            if self.position != "bottom" or not self.config.all_monitors:
+                return
+            host = self.plugins.get("bottom_panel")
+            if host is None or not hasattr(host, "set_mirroring"):
+                self.logger.warning(
+                    "Dock taskbar: the bottom panel cannot be shown on every monitor."
+                )
+                return
+            self._mirror_host = host
+            host.add_mirror_listener(self._on_mirror)
+            host.set_mirroring(True)
+
+        def _teardown_mirrors(self):
+            host = self._mirror_host
+            if host is None:
+                return
+            host.remove_mirror_listener(self._on_mirror)
+            for output in list(self.mirror_bars):
+                self._remove_mirror(output)
+            host.set_mirroring(False)
+            self._mirror_host = None
+
+        def _on_mirror(self, kind, output, box):
+            """A window for another monitor came (``added``) or goes (``removed``)."""
+            if kind == "added":
+                self._add_mirror(output, box)
+            elif kind == "removed":
+                self._remove_mirror(output)
+
+        def _add_mirror(self, output, box):
+            bar = DockBar(output)
+            self.ui.create_layout(bar)
+            self.ui.attach_launcher(bar)
+            bar.region = DockTaskbarRegion(self, lambda: bar.dock)
+            box.append(bar.dock)
+            self.mirror_bars[output] = bar
+            self.events.add_bar(output, bar)
+            if self.config.blur_to_dock:
+                bar.region.start()
+            self.sync()
+
+        def _remove_mirror(self, output):
+            bar = self.mirror_bars.pop(output, None)
+            if bar is None:
+                return
+            self.events.remove_bar(output)
+            bar.region.stop()
+            self._park_launcher()
+            self.ui.clear(bar)
+
+        def open_launcher(self, button):
+            """Opens (or closes) the app launcher popover from the button of a copy.
+
+            The popover has one parent, the launcher's own button. For the time it
+            is open it sits on ``button``, then it goes back.
+            """
+            launcher = self.plugins.get("app_launcher")
+            popover = getattr(launcher, "popover_launcher", None)
+            if popover is None:
+                return
+            if popover.is_visible():
+                popover.popdown()
+                return
+            if popover.get_parent() is not button:
+                popover.unparent()
+                popover.set_parent(button)
+            handler = 0
+
+            def closed(*_):
+                popover.disconnect(handler)
+                self.glib.idle_add(self._park_launcher)
+
+            handler = popover.connect("closed", closed)
+            popover.popup()
+
+        def _park_launcher(self):
+            """Puts the launcher popover back on the launcher's own button."""
+            launcher = self.plugins.get("app_launcher")
+            popover = getattr(launcher, "popover_launcher", None)
+            home = getattr(launcher, "appmenu", None)
+            if popover is not None and home is not None:
+                if popover.get_parent() is not home:
+                    popover.unparent()
+                    popover.set_parent(home)
+            return False
 
         def _setup_exclusive_zone(self):
             if not self.config.layer_always_exclusive:
@@ -242,9 +348,10 @@ def get_plugin_class():
                         for key, entry in self.entry_map.items()
                     }
                 )
-            for key, widget in self.widgets.items():
-                if key in self.entry_map:
-                    self.ui.set_audio(widget, *flags.get(key, (False, False)))
+            for bar in self.all_bars():
+                for key, widget in bar.widgets.items():
+                    if key in self.entry_map:
+                        self.ui.set_audio(widget, *flags.get(key, (False, False)))
 
         def sync(self):
             """Rebuilds the entries from the windows and the launchers, and redraws."""
@@ -269,8 +376,9 @@ def get_plugin_class():
                 focused = next((v for v in entry.views if v.get("is_focused")), None)
                 if focused is not None:
                     self.last_focused[entry.key] = focused.get("id")
-            self.ui.apply(entries)
-            self.region.request()
+            for bar in self.all_bars():
+                self.ui.apply(entries, bar)
+                bar.region.request()
             self.refresh_audio()
             open_key = self.preview.key
             if open_key in self.entry_map:
@@ -417,6 +525,7 @@ def get_plugin_class():
                 self._config_monitor = None
             self.events.unsubscribe()
             self.region.stop()
+            self._teardown_mirrors()
             self.preview.destroy()
             self.menu.destroy()
 

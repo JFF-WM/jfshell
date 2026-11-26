@@ -42,6 +42,14 @@ class DockTaskbarConfig:
                 "If True, the panel is set to Layer.TOP and reserves space.",
             )
         )
+        self.all_monitors = bool(
+            h(
+                ["panel", "all_monitors"],
+                True,
+                "Show the dock on every monitor, not only on the one of the panel "
+                "(bottom panel only).",
+            )
+        )
         self.icon_size = _as_int(
             h(["layout", "icon_size"], 40, "Size of the application icons."), 40, 8
         )

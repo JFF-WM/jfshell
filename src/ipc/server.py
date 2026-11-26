@@ -62,7 +62,8 @@ class EventServer:
         """Turn one jff ``watch`` event into the panel's internal events.
 
         ``state`` is owned by ``read_events`` (``windows``: id -> last known window,
-        ``overview``: bool, ``annotations``: id -> last known DBus annotation).
+        ``overview``: bool, ``overview_output``: monitor the overview is open on,
+        ``annotations``: id -> last known DBus annotation).
         Internal names: view-mapped, view-unmapped,
         view-focused, view-title-changed, view-app-id-changed,
         workspace-changed, overview-changed, view-drag-changed,
@@ -85,9 +86,17 @@ class EventServer:
             for vid, v in old.items():
                 if vid not in new:
                     yield {"event": "view-unmapped", "view": cls._view_msg(v)}
-            if "overview" in ev and bool(ev["overview"]) != state["overview"]:
-                state["overview"] = bool(ev["overview"])
-                yield cls._overview_msg(state["overview"])
+            if "overview" in ev:
+                is_open = bool(ev["overview"])
+                output = ev.get("overview_output") if is_open else None
+                if is_open != state["overview"] or output != state.get(
+                    "overview_output"
+                ):
+                    # A closing overview reports the monitor it was open on.
+                    shown = output or state.get("overview_output")
+                    state["overview"] = is_open
+                    state["overview_output"] = output
+                    yield cls._overview_msg(is_open, shown)
             if "dbus_annotations" in ev:
                 old_annotations = dict(annotations)
                 new_annotations = {a["id"]: a for a in ev["dbus_annotations"]}
@@ -164,8 +173,13 @@ class EventServer:
             }
 
         elif kind == "overview":
-            state["overview"] = bool(ev.get("open"))
-            yield cls._overview_msg(state["overview"])
+            is_open = bool(ev.get("open"))
+            output = ev.get("output")
+            # A closing overview reports the monitor it was open on.
+            shown = output or state.get("overview_output")
+            state["overview"] = is_open
+            state["overview_output"] = output if is_open else None
+            yield cls._overview_msg(is_open, shown)
 
         elif kind == "drag":
             vid, on = ev.get("id"), bool(ev.get("on"))
@@ -196,12 +210,13 @@ class EventServer:
         }
 
     @staticmethod
-    def _overview_msg(is_open: bool) -> dict:
+    def _overview_msg(is_open: bool, output: str | None = None) -> dict:
         return {
             "event": "overview-changed",
             "type": "overview-changed",
             "state": is_open,
-            "payload": {"is_open": is_open},
+            "output": output,
+            "payload": {"is_open": is_open, "output": output},
         }
 
     def _emit(self, ev: dict) -> bool:
@@ -217,7 +232,12 @@ class EventServer:
 
     def read_events(self) -> None:
         """Follow jff's ``watch`` stream (no polling) and feed ``event_queue``."""
-        state: dict[str, Any] = {"windows": {}, "overview": False, "annotations": {}}
+        state: dict[str, Any] = {
+            "windows": {},
+            "overview": False,
+            "overview_output": None,
+            "annotations": {},
+        }
         while not self._stopping.is_set():
             if not self.is_socket_active():
                 time.sleep(2)

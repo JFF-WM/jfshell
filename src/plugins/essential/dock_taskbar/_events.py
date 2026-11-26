@@ -28,6 +28,18 @@ class DockTaskbarEvents:
             lambda: getattr(self.plugin, "dock", None),
             lambda: bool(self.plugin.config.hide_on_overview_drag),
         )
+        # output -> hider of the copy of the bar on that monitor
+        self._mirror_hiders = {}
+
+    def add_bar(self, output, bar):
+        """Hides the window of a bar on another monitor during an overview drag."""
+        self._mirror_hiders[output] = OverviewDragHider(
+            lambda: getattr(bar, "dock", None),
+            lambda: bool(self.plugin.config.hide_on_overview_drag),
+        )
+
+    def remove_bar(self, output):
+        self._mirror_hiders.pop(output, None)
 
     def subscribe(self):
         """Subscribes to every event the bar reacts to."""
@@ -51,7 +63,8 @@ class DockTaskbarEvents:
         ev = msg.get("event")
 
         if ev in self._drag_hider.EVENTS:
-            self._drag_hider.handle(msg)
+            for hider in (self._drag_hider, *self._mirror_hiders.values()):
+                hider.handle(msg)
             if ev == "view-drag-changed":
                 return
 
@@ -60,7 +73,7 @@ class DockTaskbarEvents:
                 # The overview shows its own windows: no thumbnails, no focus mark.
                 self.plugin.preview.hide()
                 self.plugin.menu.popdown()
-                for widget in self.plugin.widgets.values():
+                for widget in self.plugin.all_widgets():
                     widget.remove_css_class("focused")
                     # Forget the cached state, or the class would never come back.
                     widget._dock_state = None

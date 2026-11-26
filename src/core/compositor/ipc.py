@@ -638,6 +638,11 @@ class IPC:
         return bool(jff_snapshot(("modes",)).get("overview"))
 
     @handle_ipc_error
+    def get_overview_output(self) -> Optional[str]:
+        """Name of the monitor the overview is open on, None when it is closed."""
+        return jff_snapshot(("modes",)).get("overview_output") or None
+
+    @handle_ipc_error
     def move_column_left(self):
         return False
 

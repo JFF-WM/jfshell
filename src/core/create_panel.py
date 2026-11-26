@@ -174,14 +174,25 @@ def CreatePanel(
     margin_bottom=0,
     margin_left=0,
     margin_right=0,
+    monitor_name: Optional[str] = None,
 ) -> Gtk.Window:
-    """Create and configure a raw Gtk panel window."""
+    """Create and configure a raw Gtk panel window.
+
+    ``monitor_name`` puts the window on that output instead of the configured
+    one (a copy of a panel for another monitor); the window then does not quit
+    the application when it is destroyed.
+    """
     window = Gtk.Window(application=app)
     window.set_default_size(width, height)
 
     config = load_full_config()
     monitors = get_monitor_info()
-    monitor = get_target_monitor(config, monitors)
+    if monitor_name is None:
+        monitor = get_target_monitor(config, monitors)
+    else:
+        monitor = monitors.get(monitor_name)
+        if monitor is None:
+            raise ValueError(f"Monitor '{monitor_name}' is not connected")
 
     setup_layer_shell(
         window=window,  # pyright: ignore
@@ -199,6 +210,7 @@ def CreatePanel(
         margin_right=margin_right,
     )
 
-    window.connect("destroy", Gtk.Application.quit)
+    if monitor_name is None:
+        window.connect("destroy", Gtk.Application.quit)
 
     return window
