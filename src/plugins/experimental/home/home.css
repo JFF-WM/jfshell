@@ -1,0 +1,115 @@
+/* Home page of the clock popover.
+   Colors come from the libadwaita palette, so the page follows light and dark
+   themes. Override the classes below in custom.css or in a theme. */
+
+.home-title {
+  font-size: 1.25em;
+  font-weight: bold;
+}
+
+.home-header-button,
+menubutton.home-header-button > button {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid alpha(@window_fg_color, 0.25);
+  background: alpha(@window_fg_color, 0.06);
+  box-shadow: none;
+}
+
+.home-header-button:hover,
+menubutton.home-header-button > button:hover {
+  background: alpha(@window_fg_color, 0.14);
+}
+
+.home-user-card {
+  border-radius: 18px;
+  border: 1px solid alpha(@window_fg_color, 0.25);
+  background-image: linear-gradient(
+    135deg,
+    alpha(@accent_bg_color, 0.55),
+    alpha(@window_fg_color, 0.08)
+  );
+}
+
+.home-avatar {
+  border: 2px solid alpha(@window_fg_color, 0.3);
+}
+
+.home-user-name {
+  font-size: 1.15em;
+  font-weight: bold;
+  text-shadow: 0 1px 2px alpha(@window_bg_color, 0.8);
+}
+
+.home-user-line {
+  opacity: 0.85;
+  text-shadow: 0 1px 2px alpha(@window_bg_color, 0.8);
+}
+
+button.home-card {
+  padding: 0;
+  border-radius: 16px;
+  border: 1px solid alpha(@window_fg_color, 0.25);
+  background: alpha(@window_fg_color, 0.06);
+  box-shadow: none;
+}
+
+button.home-card:hover {
+  background: alpha(@window_fg_color, 0.12);
+}
+
+.home-media-icon {
+  opacity: 0.7;
+}
+
+.home-media-title {
+  font-weight: 600;
+}
+
+.home-media-subtitle,
+.home-clock-location {
+  opacity: 0.6;
+}
+
+.home-clock-time {
+  font-size: 2em;
+  font-weight: bold;
+  opacity: 0.8;
+}
+
+.home-clock-date {
+  font-size: 0.95em;
+}
+
+button.home-tile {
+  padding: 0;
+  border-radius: 16px;
+  border: 1px solid alpha(@window_fg_color, 0.25);
+  background: alpha(@window_fg_color, 0.06);
+  box-shadow: none;
+}
+
+button.home-tile:hover {
+  background: alpha(@window_fg_color, 0.12);
+}
+
+button.home-tile-active {
+  border-color: transparent;
+  background: alpha(@window_fg_color, 0.82);
+  color: @window_bg_color;
+}
+
+button.home-tile-active:hover {
+  background: alpha(@window_fg_color, 0.9);
+}
+
+.home-tile-label {
+  font-size: 0.85em;
+}
+
+.home-power-entry {
+  padding: 6px 12px;
+  border-radius: 8px;
+}

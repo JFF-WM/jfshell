@@ -216,6 +216,43 @@ def state_flags(views: list) -> tuple[bool, bool]:
     return atop, sticky
 
 
+def container_id(view):
+    """The jff container id of a window dict, or None when it is in no container."""
+    container = view.get("container") if isinstance(view, dict) else None
+    if isinstance(container, dict):
+        return container.get("id")
+    return None
+
+
+def preview_views(views, limit=None):
+    """The windows to draw a thumbnail for, one per jff container.
+
+    jff draws a whole container as one picture, so every window of a container
+    would give the same thumbnail: only one of them is kept (the focused one
+    when there is one, else the first). Windows outside any container keep
+    their own thumbnail. Order follows the first window of each container;
+    ``limit`` is applied after the grouping.
+    """
+    items = [v for v in views or () if isinstance(v, dict)]
+    chosen = {}
+    for view in items:
+        cid = container_id(view)
+        if cid is None:
+            continue
+        current = chosen.get(cid)
+        if current is None or (view.get("is_focused") and not current.get("is_focused")):
+            chosen[cid] = view
+    result, seen = [], set()
+    for view in items:
+        cid = container_id(view)
+        if cid is None:
+            result.append(view)
+        elif cid not in seen:
+            seen.add(cid)
+            result.append(chosen[cid])
+    return result[:limit] if limit else result
+
+
 def moved(items: list, index: int, step: int) -> list:
     """A copy of ``items`` with the item at ``index`` moved ``step`` places."""
     target = index + step

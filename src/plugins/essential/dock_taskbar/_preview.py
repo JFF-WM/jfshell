@@ -13,6 +13,8 @@ the panel. When jff cannot draw a window, its card shows the app icon instead.
 import os
 import time
 
+from ._model import preview_views
+
 
 class DockTaskbarPreview:
     """Hover popover with a card per window of the hovered icon."""
@@ -162,7 +164,7 @@ class DockTaskbarPreview:
         if entry is None or not entry.running:
             return False
         self._generation += 1
-        views = list(entry.views[: self.plugin.config.preview_max_windows])
+        views = preview_views(entry.views, self.plugin.config.preview_max_windows)
         scale = max(1, button.get_scale_factor())
         self.plugin.run_in_thread(
             self._load, button, entry.key, views, self._generation, scale
@@ -185,7 +187,8 @@ class DockTaskbarPreview:
         if not self.is_visible() or self.key != key or self.button is None:
             return
         shown = tuple(
-            v.get("id") for v in views[: self.plugin.config.preview_max_windows]
+            v.get("id")
+            for v in preview_views(views, self.plugin.config.preview_max_windows)
         )
         if shown != self._ids:
             if shown:

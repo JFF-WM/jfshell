@@ -713,6 +713,7 @@ class IPC:
             "output-id": v.get("output"),
             "always-on-top": bool(v.get("always_on_top")),
             "sticky": bool(v.get("sticky")),
+            "container": v.get("container"),
             "geometry": {
                 "x": v.get("x", 0),
                 "y": v.get("y", 0),
