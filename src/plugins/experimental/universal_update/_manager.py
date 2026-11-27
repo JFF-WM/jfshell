@@ -16,6 +16,7 @@ def get_manager():
             config = config or {}
 
             distro_id = "unknown"
+            id_like = []
             try:
                 if os.path.exists("/etc/os-release"):
                     with open("/etc/os-release", "r") as f:
@@ -25,9 +26,36 @@ def get_manager():
                                 distro_id = (
                                     line.strip().split("=")[1].strip('"').lower()
                                 )
-                                break
+                            elif line.startswith("ID_LIKE="):
+                                id_like = (
+                                    line.strip()
+                                    .split("=", 1)[1]
+                                    .strip("\"'")
+                                    .lower()
+                                    .split()
+                                )
             except Exception:
                 pass
+            # Derivatives (CachyOS, EndeavourOS, Manjaro, Mint, ...) use the
+            # backend of the distribution they are based on.
+            known = (
+                "fedora",
+                "arch",
+                "debian",
+                "ubuntu",
+                "pop",
+                "opensuse",
+                "suse",
+                "void",
+                "alpine",
+            )
+            if distro_id not in known:
+                distro_id = next(
+                    (d for d in id_like if d in known or d.startswith("opensuse")),
+                    distro_id,
+                )
+                if distro_id.startswith("opensuse"):
+                    distro_id = "opensuse"
 
             all_potential = []
 
@@ -60,14 +88,21 @@ def get_manager():
             self.active_providers = [p for p in all_potential if p.is_available()]
 
         async def check_all(self, asyncio_lib, subprocess_lib, timeout: int) -> int:
+            details = await self.check_all_details(asyncio_lib, subprocess_lib, timeout)
+            return sum(len(updates) for _, updates in details)
+
+        async def check_all_details(
+            self, asyncio_lib, subprocess_lib, timeout: int
+        ) -> list[tuple[str, list]]:
+            """``[(backend name, [Update, ...]), ...]`` for every active backend."""
             import asyncio
 
             tasks = [
-                p.get_update_count(asyncio_lib, subprocess_lib, timeout)
+                p.get_updates(asyncio_lib, subprocess_lib, timeout)
                 for p in self.active_providers
             ]
             results = await asyncio.gather(*tasks)
-            return sum(results)
+            return [(p.name, list(r)) for p, r in zip(self.active_providers, results)]
 
         def get_combined_command(self) -> str:
             commands = [p.get_update_command() for p in self.active_providers]

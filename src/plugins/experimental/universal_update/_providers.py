@@ -1,7 +1,38 @@
 import abc
 import shutil
-import re
 import os
+
+from ._parse import (
+    Update,
+    parse_apk,
+    parse_apt,
+    parse_dnf,
+    parse_flatpak,
+    parse_pacman,
+    parse_xbps,
+    parse_zypper,
+)
+
+
+async def _run(asyncio_lib, subprocess_lib, timeout, *args) -> tuple[int | None, str]:
+    """Runs a listing command: ``(exit code, stdout)``; ``(None, "")`` on failure."""
+    try:
+        proc = await asyncio_lib.create_subprocess_exec(
+            *args,
+            stdout=subprocess_lib.PIPE,
+            stderr=subprocess_lib.DEVNULL,
+        )
+    except Exception:
+        return None, ""
+    try:
+        stdout, _ = await asyncio_lib.wait_for(proc.communicate(), timeout=timeout)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+        return None, ""
+    return proc.returncode, stdout.decode(errors="replace") if stdout else ""
 
 
 class UpdateProvider(abc.ABC):
@@ -27,8 +58,13 @@ class UpdateProvider(abc.ABC):
         )
 
     @abc.abstractmethod
+    async def get_updates(
+        self, asyncio_lib, subprocess_lib, timeout: int
+    ) -> list[Update]:
+        """The pending updates; an empty list when there are none or on failure."""
+
     async def get_update_count(self, asyncio_lib, subprocess_lib, timeout: int) -> int:
-        pass
+        return len(await self.get_updates(asyncio_lib, subprocess_lib, timeout))
 
 
 class PacmanProvider(UpdateProvider):
@@ -52,17 +88,15 @@ class PacmanProvider(UpdateProvider):
     def get_default_command(self):
         return "sudo pacman -Syu"
 
-    async def get_update_count(self, asyncio_lib, subprocess_lib, timeout):
-        try:
-            proc = await asyncio_lib.create_subprocess_exec(
-                "checkupdates",
-                stdout=subprocess_lib.PIPE,
-                stderr=subprocess_lib.DEVNULL,
-            )
-            stdout, _ = await asyncio_lib.wait_for(proc.communicate(), timeout=timeout)
-            return len(stdout.decode().strip().splitlines()) if stdout else 0
-        except Exception:
-            return 0
+    async def get_updates(self, asyncio_lib, subprocess_lib, timeout):
+        # checkupdates (pacman-contrib) syncs a temporary database; without it
+        # pacman -Qu still lists what the last -Sy saw.
+        if shutil.which("checkupdates"):
+            args = ("checkupdates",)
+        else:
+            args = ("pacman", "-Qu")
+        _, out = await _run(asyncio_lib, subprocess_lib, timeout, *args)
+        return parse_pacman(out)
 
 
 class DnfProvider(UpdateProvider):
@@ -76,24 +110,12 @@ class DnfProvider(UpdateProvider):
     def get_default_command(self):
         return "sudo dnf upgrade"
 
-    async def get_update_count(self, asyncio_lib, subprocess_lib, timeout):
-        try:
-            proc = await asyncio_lib.create_subprocess_exec(
-                "dnf",
-                "check-update",
-                "-q",
-                stdout=subprocess_lib.PIPE,
-                stderr=subprocess_lib.DEVNULL,
-            )
-            stdout, _ = await asyncio_lib.wait_for(proc.communicate(), timeout=timeout)
-
-            if proc.returncode == 100 and stdout:
-                lines = stdout.decode().strip().splitlines()
-                updates = [l for l in lines if l.strip()]
-                return len(updates)
-            return 0
-        except Exception:
-            return 0
+    async def get_updates(self, asyncio_lib, subprocess_lib, timeout):
+        code, out = await _run(
+            asyncio_lib, subprocess_lib, timeout, "dnf", "check-update", "-q"
+        )
+        # 100 means updates are available, 0 none, anything else an error.
+        return parse_dnf(out) if code == 100 else []
 
 
 class AptProvider(UpdateProvider):
@@ -107,20 +129,11 @@ class AptProvider(UpdateProvider):
     def get_default_command(self):
         return "sudo apt update && sudo apt upgrade -y"
 
-    async def get_update_count(self, asyncio_lib, subprocess_lib, timeout):
-        try:
-            proc = await asyncio_lib.create_subprocess_exec(
-                "apt-get",
-                "-s",
-                "upgrade",
-                stdout=subprocess_lib.PIPE,
-                stderr=subprocess_lib.DEVNULL,
-            )
-            stdout, _ = await asyncio_lib.wait_for(proc.communicate(), timeout=timeout)
-            match = re.search(r"(\d+)\s+upgraded", stdout.decode())
-            return int(match.group(1)) if match else 0
-        except Exception:
-            return 0
+    async def get_updates(self, asyncio_lib, subprocess_lib, timeout):
+        _, out = await _run(
+            asyncio_lib, subprocess_lib, timeout, "apt-get", "-s", "upgrade"
+        )
+        return parse_apt(out)
 
 
 class ZypperProvider(UpdateProvider):
@@ -134,23 +147,9 @@ class ZypperProvider(UpdateProvider):
     def get_default_command(self):
         return "sudo zypper update"
 
-    async def get_update_count(self, asyncio_lib, subprocess_lib, timeout):
-        try:
-            proc = await asyncio_lib.create_subprocess_exec(
-                "zypper",
-                "-q",
-                "lu",
-                stdout=subprocess_lib.PIPE,
-                stderr=subprocess_lib.DEVNULL,
-            )
-            stdout, _ = await asyncio_lib.wait_for(proc.communicate(), timeout=timeout)
-            return (
-                len([l for l in stdout.decode().splitlines() if l.startswith("v")])
-                if stdout
-                else 0
-            )
-        except Exception:
-            return 0
+    async def get_updates(self, asyncio_lib, subprocess_lib, timeout):
+        _, out = await _run(asyncio_lib, subprocess_lib, timeout, "zypper", "-q", "lu")
+        return parse_zypper(out)
 
 
 class XbpsProvider(UpdateProvider):
@@ -164,18 +163,9 @@ class XbpsProvider(UpdateProvider):
     def get_default_command(self):
         return "sudo xbps-install -Su"
 
-    async def get_update_count(self, asyncio_lib, subprocess_lib, timeout):
-        try:
-            proc = await asyncio_lib.create_subprocess_exec(
-                "xbps-install",
-                "-un",
-                stdout=subprocess_lib.PIPE,
-                stderr=subprocess_lib.DEVNULL,
-            )
-            stdout, _ = await asyncio_lib.wait_for(proc.communicate(), timeout=timeout)
-            return len(stdout.decode().strip().splitlines()) if stdout else 0
-        except Exception:
-            return 0
+    async def get_updates(self, asyncio_lib, subprocess_lib, timeout):
+        _, out = await _run(asyncio_lib, subprocess_lib, timeout, "xbps-install", "-un")
+        return parse_xbps(out)
 
 
 class ApkProvider(UpdateProvider):
@@ -189,20 +179,11 @@ class ApkProvider(UpdateProvider):
     def get_default_command(self):
         return "sudo apk update && sudo apk upgrade"
 
-    async def get_update_count(self, asyncio_lib, subprocess_lib, timeout):
-        try:
-            proc = await asyncio_lib.create_subprocess_exec(
-                "apk",
-                "version",
-                "-l",
-                "<",
-                stdout=subprocess_lib.PIPE,
-                stderr=subprocess_lib.DEVNULL,
-            )
-            stdout, _ = await asyncio_lib.wait_for(proc.communicate(), timeout=timeout)
-            return len(stdout.decode().strip().splitlines()) if stdout else 0
-        except Exception:
-            return 0
+    async def get_updates(self, asyncio_lib, subprocess_lib, timeout):
+        _, out = await _run(
+            asyncio_lib, subprocess_lib, timeout, "apk", "version", "-l", "<"
+        )
+        return parse_apk(out)
 
 
 class FlatpakProvider(UpdateProvider):
@@ -216,16 +197,14 @@ class FlatpakProvider(UpdateProvider):
     def get_default_command(self):
         return "flatpak update -y"
 
-    async def get_update_count(self, asyncio_lib, subprocess_lib, timeout):
-        try:
-            proc = await asyncio_lib.create_subprocess_exec(
-                "flatpak",
-                "remote-ls",
-                "--updates",
-                stdout=subprocess_lib.PIPE,
-                stderr=subprocess_lib.DEVNULL,
-            )
-            stdout, _ = await asyncio_lib.wait_for(proc.communicate(), timeout=timeout)
-            return len(stdout.decode().strip().splitlines()) if stdout else 0
-        except Exception:
-            return 0
+    async def get_updates(self, asyncio_lib, subprocess_lib, timeout):
+        _, out = await _run(
+            asyncio_lib,
+            subprocess_lib,
+            timeout,
+            "flatpak",
+            "remote-ls",
+            "--updates",
+            "--columns=name,application,version,origin",
+        )
+        return parse_flatpak(out)
