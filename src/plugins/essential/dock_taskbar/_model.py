@@ -13,6 +13,7 @@ the bar never shows a lone window and never shows a window title.
 import os
 import re
 import shlex
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
@@ -21,6 +22,10 @@ _FIELD_CODE = re.compile(r"\s*%[fFuUdDnNickvm]")
 
 SEPARATOR = "separator"
 APP = "app"
+
+# The two parts of the bar a drop can land in (see drop_slot).
+PINNED = "pinned"
+UNPINNED = "unpinned"
 
 
 @dataclass
@@ -221,13 +226,121 @@ def moved(items: list, index: int, step: int) -> list:
     return result
 
 
+def moved_to(items: list, index: int, slot: int) -> list:
+    """A copy of ``items`` with the item at ``index`` moved to the gap ``slot``.
+
+    Gaps count in the original list: ``0`` is before the first item and
+    ``len(items)`` after the last one, so the gaps on both sides of the item
+    itself leave the list as it is. Out of range slots are clamped.
+    """
+    if not 0 <= index < len(items):
+        return list(items)
+    slot = max(0, min(slot, len(items)))
+    result = list(items)
+    item = result.pop(index)
+    if slot > index:
+        slot -= 1
+    result.insert(slot, item)
+    return result
+
+
+def drop_slot(
+    entries: list[Entry],
+    order: list,
+    pinned_count: int,
+    target_key: str,
+    after: bool,
+) -> tuple[str, int] | None:
+    """Where a drop next to an entry lands.
+
+    Args:
+        entries: What the bar shows (from build_entries).
+        order: The unpinned group order (from build_entries).
+        pinned_count: Length of the launcher list ``entries`` was built from.
+        target_key: Key of the entry the drop is next to.
+        after: Whether the drop is after (right of) that entry.
+
+    Returns:
+        ``(PINNED, gap in the launcher list)`` or ``(UNPINNED, gap in order)``;
+        None when the target is not on the bar.
+    """
+    target = next((e for e in entries if e.key == target_key), None)
+    if target is None:
+        return None
+    step = 1 if after else 0
+    if target.index >= 0:
+        # A launcher or a separator saved in the launcher list.
+        return PINNED, target.index + step
+    if target.kind == SEPARATOR:
+        # The automatic separator between the launchers and the other apps.
+        return (UNPINNED, 0) if after else (PINNED, pinned_count)
+    if target_key in order:
+        return UNPINNED, order.index(target_key) + step
+    return UNPINNED, len(order)
+
+
+def apply_drop(
+    pinned: list,
+    order: list,
+    entries: list[Entry],
+    source_key: str,
+    target_key: str,
+    after: bool,
+    make_item: Callable[[Entry], dict | None] | None = None,
+) -> tuple[list, list]:
+    """The launcher list and group order after an icon is dropped somewhere.
+
+    * A launcher moves within the launchers. Dropped among the other apps it
+      stays pinned and goes last, so a drag never unpins anything.
+    * An unpinned app dropped among the launchers is pinned at that place,
+      when ``make_item`` gives a launcher for it; otherwise (no command to
+      start it, or a launcher that already matches it) it goes first among
+      the other apps.
+    * An unpinned app dropped among the other apps changes their order.
+
+    Args:
+        pinned: The launcher list ``entries`` was built from.
+        order: The unpinned group order ``entries`` was built with.
+        entries: What the bar shows.
+        source_key: Key of the dragged entry.
+        target_key: Key of the entry it was dropped next to.
+        after: Whether it was dropped after that entry.
+        make_item: Builds the launcher config of an unpinned entry, or None.
+
+    Returns:
+        ``(pinned, order)``: new lists; equal to the inputs when nothing moves.
+    """
+    source = next((e for e in entries if e.key == source_key), None)
+    slot = drop_slot(entries, order, len(pinned), target_key, after)
+    if source is None or source.kind != APP or slot is None:
+        return list(pinned), list(order)
+    part, gap = slot
+    if source.pinned:
+        if part == UNPINNED:
+            gap = len(pinned)
+        return moved_to(pinned, source.index, gap), list(order)
+    if part == PINNED:
+        item = make_item(source) if make_item is not None else None
+        if item is not None:
+            added = with_pinned(pinned, item, at=gap)
+            if len(added) > len(pinned):
+                return added, [k for k in order if k != source_key]
+        gap = 0
+    if source_key not in order:
+        return list(pinned), list(order)
+    return list(pinned), moved_to(order, order.index(source_key), gap)
+
+
 def without(items: list, index: int) -> list:
     """A copy of ``items`` without the item at ``index``."""
     return [item for i, item in enumerate(items) if i != index]
 
 
-def with_pinned(items: list, item: dict) -> list:
-    """A copy of ``items`` with ``item`` appended, unless a launcher already matches it."""
+def with_pinned(items: list, item: dict, at: int | None = None) -> list:
+    """A copy of ``items`` with ``item`` added, unless a launcher already matches it.
+
+    The item is appended, or inserted at index ``at`` when it is given.
+    """
     keys = pinned_keys(item)
     for existing in items:
         if (
@@ -236,4 +349,8 @@ def with_pinned(items: list, item: dict) -> list:
             and keys & pinned_keys(existing)
         ):
             return list(items)
-    return [*items, item]
+    if at is None:
+        return [*items, item]
+    result = list(items)
+    result.insert(max(0, min(at, len(result))), item)
+    return result

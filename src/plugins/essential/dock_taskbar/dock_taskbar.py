@@ -32,10 +32,10 @@ def get_plugin_class():
     from ._menu import DockTaskbarMenu
     from ._model import (
         APP,
+        apply_drop,
         build_entries,
         command_name,
         key_variants,
-        moved,
         strip_field_codes,
         view_app_id,
         with_pinned,
@@ -68,6 +68,8 @@ def get_plugin_class():
         def on_start(self):
             # entry key -> Entry of the last sync (only apps, no separators)
             self.entry_map = {}
+            # Every entry of the last sync, separators included, in bar order.
+            self.entries = []
             # entry key -> widget (button or separator)
             self.widgets = {}
             # Keys of the unpinned groups, so they keep their place.
@@ -243,27 +245,52 @@ def get_plugin_class():
             self.config_handler.set_root_setting([str(self.plugin_id), "app"], items)
             self.sync()
 
-        def pin(self, entry):
-            """Adds a running app to the launchers."""
+        def _pin_item(self, entry):
+            """The launcher config for a running app, or None without a command."""
             cmd = self.command_for(entry)
             if not cmd:
-                return
+                return None
             info = self.app_info(entry.app_id)
-            item = {
+            return {
                 "id": info["name"] or entry.app_id,
                 "cmd": cmd,
                 "icon": self.icon_for(entry),
                 "app_id": entry.app_id,
             }
-            self.save_pinned(with_pinned(self.load_pinned(), item))
+
+        def pin(self, entry):
+            """Adds a running app to the launchers."""
+            item = self._pin_item(entry)
+            if item is not None:
+                self.save_pinned(with_pinned(self.load_pinned(), item))
 
         def unpin(self, entry):
             if entry.pinned:
                 self.save_pinned(without(self.load_pinned(), entry.index))
 
-        def move_pinned(self, entry, step):
-            if entry.pinned:
-                self.save_pinned(moved(self.load_pinned(), entry.index, step))
+        def move_entry(self, source_key, target_key, after):
+            """An icon was dragged next to another one: reorder (and maybe pin).
+
+            Launchers are reordered in the config; the other apps only change
+            their place on the bar. An unpinned app dropped among the launchers
+            gets pinned there. Runs from an idle callback, so it returns False.
+            """
+            pinned = self.load_pinned()
+            new_pinned, new_order = apply_drop(
+                pinned,
+                self.order,
+                self.entries,
+                source_key,
+                target_key,
+                after,
+                self._pin_item,
+            )
+            self.order = new_order
+            if new_pinned != pinned:
+                self.save_pinned(new_pinned)
+            else:
+                self.sync()
+            return False
 
         def watch_config(self):
             """Redraws the bar when the config file is edited by hand."""
@@ -371,6 +398,7 @@ def get_plugin_class():
             entries, self.order = build_entries(
                 self.load_pinned(), views, self.order, self.config.show_unpinned, extra
             )
+            self.entries = entries
             self.entry_map = {e.key: e for e in entries if e.kind == APP}
             for entry in self.entry_map.values():
                 focused = next((v for v in entry.views if v.get("is_focused")), None)

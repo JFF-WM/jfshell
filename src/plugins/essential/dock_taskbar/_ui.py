@@ -31,6 +31,8 @@ class DockTaskbarUI:
     # The state badges are 12px discs with no padding on purpose: two of them
     # side by side take 24px, which leaves the top-right corner of a 40px icon
     # (the default icon_size) to the 16px audio badge.
+    #
+    # The same provider carries the look of an icon being dragged.
     BADGE_CSS = """
 .dock-taskbar-audio {
   padding: 2px;
@@ -54,6 +56,10 @@ class DockTaskbarUI:
   background-color: var(--theme-state-badge, #77767b);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85), 0 1px 3px rgba(0, 0, 0, 0.5);
 }
+
+.dock-taskbar-button.dragging {
+  opacity: 0.7;
+}
 """
 
     def __init__(self, plugin_instance):
@@ -65,6 +71,8 @@ class DockTaskbarUI:
         self.plugin = plugin_instance
         self.config = plugin_instance.config
         self._badge_provider = None
+        # The icon drag in progress (see _on_drag_begin), or None.
+        self._drag = None
 
     # --- layout ---
 
@@ -233,6 +241,7 @@ class DockTaskbarUI:
 
         button.connect("clicked", self._on_clicked)
         self._add_gestures(button)
+        self._add_drag(button)
         p.gtk_helper.add_cursor_effect(button)
         return button
 
@@ -291,10 +300,141 @@ class DockTaskbarUI:
         return bool(self.plugin.cycle(key, 1 if dy > 0 else -1))
 
     def _on_hover_enter(self, controller, x, y):
+        if self.dragging:
+            return
         self.plugin.preview.on_enter(controller.get_widget())
 
     def _on_hover_leave(self, controller):
         self.plugin.preview.on_leave(controller.get_widget())
+
+    # --- drag and drop ---
+    #
+    # The drag never leaves the panel, so it is done with a plain GestureDrag
+    # instead of Wayland drag and drop: no data offer, no compositor support
+    # needed. The button follows the pointer along the bar while the mouse is
+    # held, and the new place is committed on release.
+
+    @property
+    def dragging(self):
+        """Whether an icon is being dragged right now."""
+        return self._drag is not None and self._drag["active"]
+
+    def _add_drag(self, button):
+        """Lets an icon be dragged to another place on its bar."""
+        from gi.repository import Gtk
+
+        gesture = Gtk.GestureDrag()  # primary button
+        gesture.connect("drag-begin", self._on_drag_begin)
+        gesture.connect("drag-update", self._on_drag_update)
+        gesture.connect("drag-end", self._on_drag_end)
+        gesture.connect("cancel", self._on_drag_cancel)
+        button.add_controller(gesture)
+
+    @staticmethod
+    def _drag_threshold():
+        from gi.repository import Gtk
+
+        try:
+            return max(1, int(Gtk.Settings.get_default().props.gtk_dnd_drag_threshold))
+        except Exception:
+            return 8
+
+    def _bar_of(self, widget):
+        parent = widget.get_parent()
+        return next((b for b in self.plugin.all_bars() if b.dock is parent), None)
+
+    def _on_drag_begin(self, gesture, x, y):
+        button = gesture.get_widget()
+        bar = self._bar_of(button)
+        if bar is None or button.entry_key not in self.plugin.entry_map:
+            self._drag = None
+            return
+        # Nothing happens until the pointer moves past the threshold, so a
+        # plain click still reaches the button.
+        self._drag = {
+            "button": button,
+            "bar": bar,
+            "start_x": x,
+            "start_y": y,
+            "active": False,
+        }
+
+    def _on_drag_update(self, gesture, off_x, off_y):
+        from gi.repository import Gtk
+
+        drag = self._drag
+        if drag is None or drag["button"] is not gesture.get_widget():
+            return
+        button, bar = drag["button"], drag["bar"]
+        if not drag["active"]:
+            if abs(off_x) < self._drag_threshold() and abs(off_y) < self._drag_threshold():
+                return
+            # Claiming the sequence cancels the button's own click.
+            gesture.set_state(Gtk.EventSequenceState.CLAIMED)
+            drag["active"] = True
+            self.plugin.preview.hide()
+            self.plugin.menu.popdown()
+            button.add_css_class("dragging")
+        # start + offset is the pointer in the button's current coordinates,
+        # even after the button has moved.
+        ok, rect = button.compute_bounds(bar.dock)
+        if ok:
+            self._move_to(bar, button, rect.get_x() + drag["start_x"] + off_x)
+
+    @staticmethod
+    def _move_to(bar, button, x):
+        """Puts ``button`` in the gap of the bar nearest to ``x``.
+
+        The gap is before the first other item whose middle is right of the
+        pointer (or after the last item). The launcher button stays first.
+        """
+        previous = bar.launcher_button
+        child = bar.dock.get_first_child()
+        while child is not None:
+            if child is not button and child is not bar.launcher_button:
+                ok, rect = child.compute_bounds(bar.dock)
+                if ok and x < rect.get_x() + rect.get_width() / 2:
+                    break
+                previous = child
+            child = child.get_next_sibling()
+        if button.get_prev_sibling() is not previous:
+            bar.dock.reorder_child_after(button, previous)
+
+    def _on_drag_end(self, gesture, off_x, off_y):
+        drag, self._drag = self._drag, None
+        if drag is None or not drag["active"]:
+            return
+        button, bar = drag["button"], drag["bar"]
+        button.remove_css_class("dragging")
+        if button.get_parent() is not bar.dock:
+            return
+        keys = {id(w): k for k, w in bar.widgets.items()}
+        nxt = button.get_next_sibling()
+        prev = button.get_prev_sibling()
+        if nxt is not None and id(nxt) in keys:
+            target, after = keys[id(nxt)], False
+        elif prev is not None and id(prev) in keys:
+            target, after = keys[id(prev)], True
+        else:
+            return
+        # Later: the move rebuilds buttons, maybe this one too.
+        self.plugin.glib.idle_add(
+            self.plugin.move_entry, button.entry_key, target, after
+        )
+
+    def _on_drag_cancel(self, gesture, sequence):
+        drag = self._drag
+        if drag is None or drag["button"] is not gesture.get_widget():
+            return
+        self._drag = None
+        if drag["active"]:
+            drag["button"].remove_css_class("dragging")
+            # Put the bar back the way the entries say.
+            self.plugin.glib.idle_add(self._resync)
+
+    def _resync(self):
+        self.plugin.sync()
+        return False
 
     # --- syncing ---
 
@@ -331,7 +471,8 @@ class DockTaskbarUI:
             if child is not bar.launcher_button:
                 current.append(child)
             child = child.get_next_sibling()
-        if current != desired:
+        # A dragged button follows the pointer; the drop decides its place.
+        if current != desired and not self.dragging:
             # The launcher button stays first.
             previous = bar.launcher_button
             for widget in desired:
@@ -352,6 +493,8 @@ class DockTaskbarUI:
         # Popovers parented to the widget have to go first, or GTK complains.
         p.preview.forget(widget)
         p.menu.forget(widget)
+        if self._drag is not None and self._drag["button"] is widget:
+            self._drag = None
         bar.dock.remove(widget)
 
     def update_button(self, button, entry):

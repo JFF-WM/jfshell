@@ -178,6 +178,106 @@ class EditTests(unittest.TestCase):
         with_sep = [{"type": "separator"}]
         self.assertEqual(len(model.with_pinned(with_sep, pin("a", "a"))), 2)
 
+    def test_with_pinned_at_index(self):
+        items = [pin("a", "a"), pin("b", "b")]
+        added = model.with_pinned(items, pin("c", "c"), at=1)
+        self.assertEqual([i["id"] for i in added], ["a", "c", "b"])
+        far = model.with_pinned(items, pin("c", "c"), at=99)
+        self.assertEqual([i["id"] for i in far], ["a", "b", "c"])
+        self.assertEqual(model.with_pinned(items, pin("A", "a"), at=0), items)
+
+    def test_moved_to(self):
+        self.assertEqual(model.moved_to([1, 2, 3], 0, 3), [2, 3, 1])
+        self.assertEqual(model.moved_to([1, 2, 3], 2, 0), [3, 1, 2])
+        self.assertEqual(model.moved_to([1, 2, 3], 0, 2), [2, 1, 3])
+        # The gaps on both sides of the item leave the list alone.
+        self.assertEqual(model.moved_to([1, 2, 3], 1, 1), [1, 2, 3])
+        self.assertEqual(model.moved_to([1, 2, 3], 1, 2), [1, 2, 3])
+        self.assertEqual(model.moved_to([1, 2, 3], 0, -5), [1, 2, 3])
+        self.assertEqual(model.moved_to([1, 2, 3], 0, 99), [2, 3, 1])
+        self.assertEqual(model.moved_to([1, 2, 3], 7, 0), [1, 2, 3])
+        items = [1, 2]
+        self.assertIsNot(model.moved_to(items, 0, 0), items)
+
+
+class DropTests(unittest.TestCase):
+    """Dragging an icon next to another one (apply_drop / drop_slot)."""
+
+    def setUp(self):
+        self.pinned = [pin("a", "a"), pin("b", "b"), pin("c", "c")]
+        views = [view(1, "a"), view(2, "x"), view(3, "y"), view(4, "z")]
+        self.entries, self.order = model.build_entries(self.pinned, views, [])
+        self.keys = {e.app_id or e.key: e.key for e in self.entries}
+
+    def drop(self, source, target, after, make_item=None):
+        return model.apply_drop(
+            self.pinned,
+            self.order,
+            self.entries,
+            self.keys[source],
+            self.keys[target],
+            after,
+            make_item,
+        )
+
+    @staticmethod
+    def ids(items):
+        return [i["id"] for i in items]
+
+    def test_slots(self):
+        slot = model.drop_slot
+        e, o = self.entries, self.order
+        self.assertEqual(slot(e, o, 3, self.keys["b"], False), (model.PINNED, 1))
+        self.assertEqual(slot(e, o, 3, self.keys["b"], True), (model.PINNED, 2))
+        self.assertEqual(slot(e, o, 3, "sep:auto", False), (model.PINNED, 3))
+        self.assertEqual(slot(e, o, 3, "sep:auto", True), (model.UNPINNED, 0))
+        self.assertEqual(slot(e, o, 3, self.keys["y"], True), (model.UNPINNED, 2))
+        self.assertIsNone(slot(e, o, 3, "nope", True))
+
+    def test_launcher_moves_among_launchers(self):
+        pinned, order = self.drop("a", "c", True)
+        self.assertEqual(self.ids(pinned), ["b", "c", "a"])
+        self.assertEqual(order, self.order)
+        pinned, _ = self.drop("c", "a", False)
+        self.assertEqual(self.ids(pinned), ["c", "a", "b"])
+
+    def test_launcher_dropped_on_itself_stays(self):
+        pinned, order = self.drop("b", "b", True)
+        self.assertEqual(pinned, self.pinned)
+        self.assertEqual(order, self.order)
+
+    def test_launcher_dropped_among_other_apps_stays_pinned_and_goes_last(self):
+        pinned, order = self.drop("a", "y", False)
+        self.assertEqual(self.ids(pinned), ["b", "c", "a"])
+        self.assertEqual(order, self.order)
+
+    def test_other_apps_reorder(self):
+        _, order = self.drop("z", "x", False)
+        self.assertEqual(order, ["app:z", "app:x", "app:y"])
+        pinned, order = self.drop("x", "z", True)
+        self.assertEqual(order, ["app:y", "app:z", "app:x"])
+        self.assertEqual(pinned, self.pinned)
+
+    def test_other_app_dropped_among_launchers_is_pinned_there(self):
+        def make(entry):
+            return pin(entry.app_id, entry.app_id)
+
+        pinned, order = self.drop("y", "a", True, make)
+        self.assertEqual(self.ids(pinned), ["a", "y", "b", "c"])
+        self.assertEqual(order, ["app:x", "app:z"])
+
+    def test_other_app_that_cannot_be_pinned_goes_first_of_its_part(self):
+        pinned, order = self.drop("y", "a", True, lambda entry: None)
+        self.assertEqual(pinned, self.pinned)
+        self.assertEqual(order, ["app:y", "app:x", "app:z"])
+
+    def test_unknown_or_separator_source_changes_nothing(self):
+        for source in ("nope", "sep:auto"):
+            pinned, order = model.apply_drop(
+                self.pinned, self.order, self.entries, source, self.keys["a"], True
+            )
+            self.assertEqual((pinned, order), (self.pinned, self.order))
+
 
 if __name__ == "__main__":
     unittest.main()

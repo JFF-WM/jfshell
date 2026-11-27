@@ -1,7 +1,8 @@
 """Context menus of the dock taskbar.
 
 Right click on an icon opens the application menu (new window, always on top,
-sticky, mute/unmute, close all, pin/unpin, move). Right click on a thumbnail
+sticky, mute/unmute, close all, pin/unpin). Icons are reordered by dragging
+them (see DockTaskbarUI), not from the menu. Right click on a thumbnail
 card opens the menu of that one window (fullscreen, always on top, sticky,
 mute/unmute, next output, close).
 """
@@ -105,7 +106,7 @@ class DockTaskbarMenu:
     # --- application menu ---
 
     def show_app(self, button, x, y, entry):
-        """Menu of an icon: launching, window state, audio, closing, pinning, moving."""
+        """Menu of an icon: launching, window state, audio, closing, pinning."""
         if entry is None:
             return
         p = self.plugin
@@ -120,10 +121,6 @@ class DockTaskbarMenu:
             label = "Close All Windows" if len(entry.views) > 1 else "Close Window"
             rows.append(self._row(label, "window-close-symbolic", lambda: p.close_all(entry)))
         if entry.pinned:
-            before, after = "Move Left", "Move Right"
-            before_icon, after_icon = "go-previous-symbolic", "go-next-symbolic"
-            rows.append(self._row(before, before_icon, lambda: p.move_pinned(entry, -1)))
-            rows.append(self._row(after, after_icon, lambda: p.move_pinned(entry, 1)))
             rows.append(self._row("Unpin from Dock", "list-remove-symbolic", lambda: p.unpin(entry)))
         elif p.command_for(entry):
             rows.append(self._row("Pin to Dock", "pin-symbolic", lambda: p.pin(entry)))
