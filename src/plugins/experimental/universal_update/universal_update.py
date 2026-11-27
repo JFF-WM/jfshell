@@ -2,7 +2,7 @@ def get_plugin_metadata(panel):
     """Retrieves the metadata for the Universal Update plugin.
 
     Args:
-        panel: The panel instance (unused, the plugin lives in the clock popover).
+        panel: The panel instance, used to resolve the systray container.
 
     Returns:
         dict: A dictionary containing plugin identification, requirements, and metadata.
@@ -12,13 +12,16 @@ def get_plugin_metadata(panel):
     bins = ["pacman", "dnf", "apt", "zypper", "xbps-install", "apk", "flatpak"]
     ENABLE = any(shutil.which(b) for b in bins)
     id = "org.jfshell.plugin.universal_update"
+    container, id = panel.config_handler.get_plugin_container("top-panel-systray", id)
     return {
         "id": id,
         "name": "Universal Update",
         "version": "2.5.1",
         "enabled": ENABLE,
+        "container": container,
+        "index": 12,
         "deps": ["css_generator", "calendar"],
-        "description": "Universal Linux update manager with per-backend custom commands, shown as a page of the clock popover.",
+        "description": "Universal Linux update manager with per-backend custom commands, shown as a page of the clock popover. A systray icon appears while updates are available and opens that page.",
     }
 
 
@@ -133,7 +136,31 @@ def get_plugin_class():
         def on_start(self):
             self.calendar = None
             self.trigger_button = None
+            # Systray icon, shown only while updates are pending. The panel
+            # loader places main_widget in the configured container.
+            self.systray_button = self.gtk.Button()
+            self.systray_button.set_icon_name("software-update-available-symbolic")
+            self.systray_button.add_css_class("flat")
+            self.systray_button.add_css_class("panel-menu-button")
+            self.systray_button.add_css_class("universal-update-panel-button")
+            self.systray_button.connect("clicked", self._on_systray_clicked)
+            self.add_cursor_effect(self.systray_button)
+            self._set_systray_visible(False)
+            self.main_widget = (self.systray_button, "append")
             self.glib.timeout_add_seconds(10, self.delay_on_start)
+
+        def _set_systray_visible(self, visible: bool) -> None:
+            """Show or hide the systray icon, including its flow box wrapper."""
+            self.systray_button.set_visible(visible)
+            parent = self.systray_button.get_parent()
+            if isinstance(parent, self.gtk.FlowBoxChild):
+                parent.set_visible(visible)
+
+        def _on_systray_clicked(self, *_) -> None:
+            """Open the clock popover on the updates page, or close it when
+            that page is already showing."""
+            if self.calendar:
+                self.calendar.open_page(PAGE_ID)
 
         def _setup_popover(self):
             """Constructs the page (status, package list, actions) and adds it to the clock popover."""
@@ -264,10 +291,11 @@ def get_plugin_class():
             self.run_in_async_task(self._manual_refresh())
 
         def on_disable(self):
-            """Takes the page out of the clock popover."""
+            """Takes the page out of the clock popover and hides the systray icon."""
             if self.calendar:
                 self.calendar.remove_page(PAGE_ID)
             self.trigger_button = None
+            self._set_systray_visible(False)
 
         async def _manual_refresh(self):
             """Performs an asynchronous update check, preventing concurrent polling operations."""
@@ -329,6 +357,8 @@ def get_plugin_class():
                 noun = "update" if count == 1 else "updates"
                 self.count_label.set_label(f"{count} {noun} available")
                 self.trigger_button.show()
+            self._set_systray_visible(count > 0)
+            self.systray_button.set_tooltip_text(self.count_label.get_label())
 
         def _launch_terminal(self, _):
             """Spawns the preferred terminal to execute the combined update command string."""
