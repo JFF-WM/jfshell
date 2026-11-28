@@ -19,6 +19,10 @@ from dataclasses import dataclass, field
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 _ENV_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 _FIELD_CODE = re.compile(r"\s*%[fFuUdDnNickvm]")
+# Programs that only run other programs: their name says nothing about the app.
+_INTERPRETER = re.compile(
+    r"^(python[\d.]*|pypy[\d.]*|node(js)?|java|ruby|perl|php|env|sh|bash|dash|zsh|fish)$"
+)
 
 SEPARATOR = "separator"
 APP = "app"
@@ -425,3 +429,23 @@ def with_hidden(items: list, index: int, hidden: bool) -> list:
     else:
         result[index] = {k: v for k, v in item.items() if k != "hidden"}
     return result
+
+
+def command_from_cmdline(raw: bytes | str) -> str:
+    """The command that started a process, from its ``/proc/<pid>/cmdline``.
+
+    Used to pin an app that has no desktop entry. Only the program itself is
+    kept (not its arguments, which may be a file the app was opened with).
+    Gives ``""`` when the program is an interpreter (``python``, ``bash``...),
+    since that would not start this app, or a relative path with a directory.
+    """
+    text = raw.decode(errors="replace") if isinstance(raw, bytes) else raw
+    parts = [p for p in text.split("\0") if p]
+    if not parts:
+        return ""
+    program = parts[0]
+    if _INTERPRETER.match(os.path.basename(program)):
+        return ""
+    if "/" in program and not os.path.isabs(program):
+        return ""
+    return shlex.quote(program)

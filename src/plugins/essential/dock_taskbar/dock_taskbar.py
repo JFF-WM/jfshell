@@ -34,6 +34,7 @@ def get_plugin_class():
         APP,
         apply_drop,
         build_entries,
+        command_from_cmdline,
         command_name,
         key_variants,
         strip_field_codes,
@@ -458,7 +459,24 @@ def get_plugin_class():
                 cmd = str(entry.item.get("cmd") or "").strip()
                 if cmd:
                     return cmd
-            return self.app_info(entry.app_id)["cmd"]
+            cmd = self.app_info(entry.app_id)["cmd"]
+            return cmd or self._process_command(entry)
+
+        def _process_command(self, entry):
+            """The command of a running window's process, for apps with no desktop entry."""
+            for view in entry.views:
+                pid = view.get("pid")
+                if not isinstance(pid, int) or pid <= 0:
+                    continue
+                try:
+                    with open(f"/proc/{pid}/cmdline", "rb") as handle:
+                        raw = handle.read()
+                except OSError:
+                    continue
+                cmd = command_from_cmdline(raw)
+                if cmd:
+                    return cmd
+            return ""
 
         def icon_for(self, entry):
             """Icon name (or absolute file path) of an entry."""
