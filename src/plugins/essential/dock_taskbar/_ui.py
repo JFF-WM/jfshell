@@ -149,6 +149,13 @@ class DockTaskbarUI:
         revealer.set_reveal_child(not revealer.get_reveal_child())
         self._set_stash_icon(bar)
 
+    def close_stash(self):
+        """Closes the revealer of the hidden launchers on every bar."""
+        for bar in self.plugin.all_bars():
+            if bar.stash_revealer.get_reveal_child():
+                bar.stash_revealer.set_reveal_child(False)
+                self._set_stash_icon(bar)
+
     @staticmethod
     def _set_stash_icon(bar):
         opened = bar.stash_revealer.get_reveal_child()

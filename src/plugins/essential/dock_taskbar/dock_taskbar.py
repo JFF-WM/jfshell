@@ -538,6 +538,9 @@ def get_plugin_class():
             cmd = self.command_for(entry)
             if cmd:
                 self.cmd.run(cmd)
+                # An app opened from the revealer closes it again.
+                if entry.stashed:
+                    self.ui.close_stash()
 
         def focus_view(self, view):
             """Focuses one window through the jff IPC."""

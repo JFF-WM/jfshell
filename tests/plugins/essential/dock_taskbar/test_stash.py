@@ -254,6 +254,23 @@ class ApplyTest(unittest.TestCase):
         self.apply(pinned, [])
         self.assertEqual(names(self.bar.stash_box), ["pin:0:a", "pin:2:c"])
 
+    def test_close_stash_closes_an_open_revealer(self):
+        self.ui.plugin.all_bars = lambda: [self.bar]
+        self.apply([launcher("a", hidden=True)], [])
+        self.bar.stash_revealer.revealed = True
+        self.ui._set_stash_icon(self.bar)
+        self.assertEqual(self.bar.stash_toggle.icon, "pan-start-symbolic")
+        self.ui.close_stash()
+        self.assertFalse(self.bar.stash_revealer.revealed)
+        self.assertEqual(self.bar.stash_toggle.icon, "pan-end-symbolic")
+
+    def test_close_stash_leaves_a_closed_revealer_alone(self):
+        self.ui.plugin.all_bars = lambda: [self.bar]
+        self.apply([launcher("a", hidden=True)], [])
+        self.ui.close_stash()
+        self.assertFalse(self.bar.stash_revealer.revealed)
+        self.assertIsNone(self.bar.stash_toggle.icon)
+
     def test_removed_launcher_leaves_the_revealer(self):
         self.apply([launcher("a", hidden=True)], [])
         self.apply([], [])
