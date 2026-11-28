@@ -121,6 +121,10 @@ class DockTaskbarMenu:
             label = "Close All Windows" if len(entry.views) > 1 else "Close Window"
             rows.append(self._row(label, "window-close-symbolic", lambda: p.close_all(entry)))
         if entry.pinned:
+            if entry.hidden:
+                rows.append(self._row("Show in Dock", "view-reveal-symbolic", lambda: p.set_hidden(entry, False)))
+            else:
+                rows.append(self._row("Hide in Revealer", "view-conceal-symbolic", lambda: p.set_hidden(entry, True)))
             rows.append(self._row("Unpin from Dock", "list-remove-symbolic", lambda: p.unpin(entry)))
         elif p.command_for(entry):
             rows.append(self._row("Pin to Dock", "pin-symbolic", lambda: p.pin(entry)))

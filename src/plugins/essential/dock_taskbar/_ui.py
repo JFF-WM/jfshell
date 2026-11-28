@@ -19,6 +19,11 @@ class DockBar:
         self.widgets: dict = {}
         self.launcher_button: Any = None
         self.region: Any = None
+        # The revealer of the hidden launchers (see DockTaskbarUI.create_layout).
+        self.stash_group: Any = None
+        self.stash_toggle: Any = None
+        self.stash_revealer: Any = None
+        self.stash_box: Any = None
 
 
 class DockTaskbarUI:
@@ -33,6 +38,9 @@ class DockTaskbarUI:
     # (the default icon_size) to the 16px audio badge.
     #
     # The same provider carries the look of an icon being dragged.
+    # How long the revealer of the hidden launchers takes to open or close.
+    STASH_TRANSITION_MS = 200
+
     BADGE_CSS = """
 .dock-taskbar-audio {
   padding: 2px;
@@ -94,7 +102,59 @@ class DockTaskbarUI:
         bar.dock.add_css_class("dock-taskbar")
         bar.dock.set_halign(Gtk.Align.CENTER)
         bar.dock.set_valign(Gtk.Align.CENTER)
+        self._create_stash(bar)
         self._install_badge_css()
+
+    def _create_stash(self, bar):
+        """Builds the revealer for the hidden launchers: a toggle button and the box.
+
+        Launchers set to hidden (and not running) live in ``bar.stash_box``
+        instead of ``bar.dock``. The group is only visible while it holds one.
+        """
+        from gi.repository import Gtk
+
+        bar.stash_box = Gtk.Box(
+            orientation=Gtk.Orientation.HORIZONTAL, spacing=self.config.spacing
+        )
+        bar.stash_box.add_css_class("dock-taskbar-stash")
+        bar.stash_box.set_margin_start(self.config.spacing)
+        bar.stash_box.set_valign(Gtk.Align.CENTER)
+
+        bar.stash_revealer = Gtk.Revealer()
+        bar.stash_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_RIGHT)
+        bar.stash_revealer.set_transition_duration(self.STASH_TRANSITION_MS)
+        bar.stash_revealer.set_reveal_child(False)
+        bar.stash_revealer.set_child(bar.stash_box)
+
+        bar.stash_toggle = Gtk.Button.new_from_icon_name("pan-end-symbolic")
+        bar.stash_toggle.add_css_class("flat")
+        bar.stash_toggle.add_css_class("dock-taskbar-stash-toggle")
+        bar.stash_toggle.set_valign(Gtk.Align.CENTER)
+        bar.stash_toggle.connect("clicked", lambda _b: self._toggle_stash(bar))
+        self.plugin.gtk_helper.add_cursor_effect(bar.stash_toggle)
+
+        # One child of the dock, so the spacing of the dock leaves no gap when
+        # the revealer is closed.
+        bar.stash_group = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        bar.stash_group.set_valign(Gtk.Align.CENTER)
+        bar.stash_group.set_visible(False)
+        bar.stash_group.append(bar.stash_toggle)
+        bar.stash_group.append(bar.stash_revealer)
+        bar.dock.append(bar.stash_group)
+
+    def _toggle_stash(self, bar):
+        """Opens or closes the revealer of the hidden launchers."""
+        self.plugin.preview.hide()
+        revealer = bar.stash_revealer
+        revealer.set_reveal_child(not revealer.get_reveal_child())
+        self._set_stash_icon(bar)
+
+    @staticmethod
+    def _set_stash_icon(bar):
+        opened = bar.stash_revealer.get_reveal_child()
+        bar.stash_toggle.set_icon_name(
+            "pan-start-symbolic" if opened else "pan-end-symbolic"
+        )
 
     def attach_launcher(self, bar=None):
         """Pins the app launcher button as the first, fixed item of the bar.
@@ -140,7 +200,8 @@ class DockTaskbarUI:
         button.set_valign(Gtk.Align.CENTER)
         button.set_hexpand(False)
         button.set_vexpand(False)
-        bar.dock.append(button)
+        # First child: the revealer was added to the dock when the layout was built.
+        bar.dock.prepend(button)
         bar.launcher_button = button
 
     def _install_badge_css(self):
@@ -391,7 +452,11 @@ class DockTaskbarUI:
         previous = bar.launcher_button
         child = bar.dock.get_first_child()
         while child is not None:
-            if child is not button and child is not bar.launcher_button:
+            if (
+                child is not button
+                and child is not bar.launcher_button
+                and child is not bar.stash_group
+            ):
                 ok, rect = child.compute_bounds(bar.dock)
                 if ok and x < rect.get_x() + rect.get_width() / 2:
                     break
@@ -451,6 +516,7 @@ class DockTaskbarUI:
             self._remove(key, bar)
 
         desired = []
+        stashed = []
         for entry in entries:
             widget = bar.widgets.get(entry.key)
             if widget is None:
@@ -460,24 +526,62 @@ class DockTaskbarUI:
                     else self.create_button(entry)
                 )
                 bar.widgets[entry.key] = widget
-                bar.dock.append(widget)
+            # A hidden launcher without windows lives in the revealer.
+            self._place(widget, bar.stash_box if entry.stashed else bar.dock)
             if entry.kind != "separator":
                 self.update_button(widget, entry)
-            desired.append(widget)
+            (stashed if entry.stashed else desired).append(widget)
 
         current = []
         child = bar.dock.get_first_child()
         while child is not None:
-            if child is not bar.launcher_button:
+            if child is not bar.launcher_button and child is not bar.stash_group:
                 current.append(child)
             child = child.get_next_sibling()
         # A dragged button follows the pointer; the drop decides its place.
-        if current != desired and not self.dragging:
-            # The launcher button stays first.
-            previous = bar.launcher_button
-            for widget in desired:
-                bar.dock.reorder_child_after(widget, previous)
+        if not self.dragging:
+            if current != desired:
+                # The launcher button stays first.
+                previous = bar.launcher_button
+                for widget in desired:
+                    bar.dock.reorder_child_after(widget, previous)
+                    previous = widget
+            # The revealer stays last.
+            last = desired[-1] if desired else bar.launcher_button
+            if bar.stash_group.get_prev_sibling() is not last:
+                bar.dock.reorder_child_after(bar.stash_group, last)
+
+        self._apply_stash(bar, stashed)
+
+    def _place(self, widget, home):
+        """Puts a button into ``home`` (the dock or the revealer) when it is elsewhere."""
+        parent = widget.get_parent()
+        if parent is home:
+            return
+        if parent is not None:
+            # Popovers parented to the widget have to go first, or GTK complains.
+            self.plugin.preview.forget(widget)
+            self.plugin.menu.forget(widget)
+            parent.remove(widget)
+        home.append(widget)
+
+    def _apply_stash(self, bar, stashed):
+        """Orders the revealer's buttons and shows its toggle only when it has any."""
+        current = []
+        child = bar.stash_box.get_first_child()
+        while child is not None:
+            current.append(child)
+            child = child.get_next_sibling()
+        if current != stashed:
+            previous = None
+            for widget in stashed:
+                bar.stash_box.reorder_child_after(widget, previous)
                 previous = widget
+        bar.stash_group.set_visible(bool(stashed))
+        bar.stash_toggle.set_tooltip_text(f"Hidden apps ({len(stashed)})")
+        if not stashed and bar.stash_revealer.get_reveal_child():
+            bar.stash_revealer.set_reveal_child(False)
+            self._set_stash_icon(bar)
 
     def clear(self, bar):
         """Removes every button of a bar (it is going away)."""
@@ -495,7 +599,9 @@ class DockTaskbarUI:
         p.menu.forget(widget)
         if self._drag is not None and self._drag["button"] is widget:
             self._drag = None
-        bar.dock.remove(widget)
+        parent = widget.get_parent()
+        if parent is not None:
+            parent.remove(widget)
 
     def update_button(self, button, entry):
         """Writes the visible state of an entry to its button, skipping no-op updates."""

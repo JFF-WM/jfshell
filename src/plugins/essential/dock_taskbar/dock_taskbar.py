@@ -38,6 +38,7 @@ def get_plugin_class():
         key_variants,
         strip_field_codes,
         view_app_id,
+        with_hidden,
         with_pinned,
         without,
     )
@@ -267,6 +268,15 @@ def get_plugin_class():
         def unpin(self, entry):
             if entry.pinned:
                 self.save_pinned(without(self.load_pinned(), entry.index))
+
+        def set_hidden(self, entry, hidden):
+            """Moves a launcher into the revealer (or back to the bar).
+
+            While its app has windows the launcher stays on the bar, see
+            ``Entry.stashed``.
+            """
+            if entry.pinned:
+                self.save_pinned(with_hidden(self.load_pinned(), entry.index, hidden))
 
         def move_entry(self, source_key, target_key, after):
             """An icon was dragged next to another one: reorder (and maybe pin).

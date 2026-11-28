@@ -54,6 +54,20 @@ class Entry:
     def focused(self) -> bool:
         return any(v.get("is_focused") for v in self.views)
 
+    @property
+    def hidden(self) -> bool:
+        """Whether the launcher is set to live in the revealer (``"hidden": true``)."""
+        return self.item is not None and bool(self.item.get("hidden"))
+
+    @property
+    def stashed(self) -> bool:
+        """Whether the button sits in the revealer: hidden, with no window open.
+
+        A hidden launcher whose app is running stays on the bar, and goes back
+        to the revealer once its last window is gone.
+        """
+        return self.hidden and not self.running
+
 
 def norm(value: object) -> str:
     """Lower-cased identifier with everything but letters and digits removed."""
@@ -390,4 +404,24 @@ def with_pinned(items: list, item: dict, at: int | None = None) -> list:
         return [*items, item]
     result = list(items)
     result.insert(max(0, min(at, len(result))), item)
+    return result
+
+
+def with_hidden(items: list, index: int, hidden: bool) -> list:
+    """A copy of ``items`` with the launcher at ``index`` hidden or shown again.
+
+    A hidden launcher carries ``"hidden": True``; showing it again removes the
+    key, so the saved config goes back to what it was. Separators, items that
+    are not dicts and indexes out of range leave the list as it is.
+    """
+    result = list(items)
+    if not 0 <= index < len(result):
+        return result
+    item = result[index]
+    if not isinstance(item, dict) or item.get("type") == SEPARATOR:
+        return result
+    if hidden:
+        result[index] = {**item, "hidden": True}
+    else:
+        result[index] = {k: v for k, v in item.items() if k != "hidden"}
     return result
